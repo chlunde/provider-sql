@@ -297,7 +297,17 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 func (c *external) executeCreateUserQuery(ctx context.Context, username string, host string, plugin string, resourceOptionsClauses []string, pw *string) error {
 	passwordSection := ""
 	if pw != nil {
-		passwordSection = fmt.Sprintf(" BY %s", mysql.QuoteValue(*pw))
+		if plugin == "" {
+			passwordSection = fmt.Sprintf(" BY %s", mysql.QuoteValue(*pw))
+		} else {
+			// MySQL: BY/AS, MariaDB: USING/AS
+			passwordSection = fmt.Sprintf(" AS %s", mysql.QuoteValue(*pw))
+		}
+	}
+
+	pluginSection := ""
+	if plugin != "" {
+		pluginSection = fmt.Sprintf(" WITH %s", plugin)
 	}
 
 	resourceOptions := ""
@@ -306,10 +316,10 @@ func (c *external) executeCreateUserQuery(ctx context.Context, username string, 
 	}
 
 	query := fmt.Sprintf(
-		"CREATE USER %s@%s IDENTIFIED WITH %s%s%s",
+		"CREATE USER %s@%s IDENTIFIED%s%s%s",
 		mysql.QuoteValue(username),
 		mysql.QuoteValue(host),
-		plugin,
+		pluginSection,
 		passwordSection,
 		resourceOptions,
 	)
@@ -345,27 +355,14 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	return c.applyAlterUserIfSomeFieldChanged(ctx, cr, passwordChanged, roToAlter, username, host, plugin, password)
 }
 
-func (c *external) UpdatePassword(ctx context.Context, cr *v1alpha1.User, username, host string) (managed.ConnectionDetails, error) {
-	pw, pwchanged, err := c.getPassword(ctx, cr)
-	if err != nil {
-		return managed.ConnectionDetails{}, err
-	}
-
-	if pwchanged {
-		query := fmt.Sprintf("ALTER USER %s@%s IDENTIFIED BY %s", mysql.QuoteValue(username), mysql.QuoteValue(host), mysql.QuoteValue(pw))
-		if err := mysql.ExecWrapper(ctx, c.db, mysql.ExecQuery{Query: query, ErrorValue: errUpdateUser}); err != nil {
-			return managed.ConnectionDetails{}, err
-		}
-
-		return c.db.GetConnectionDetails(username, pw), nil
-	}
-
-	return managed.ConnectionDetails{}, nil
-}
-
 func (c *external) applyAlterUserIfSomeFieldChanged(ctx context.Context, cr *v1alpha1.User, passwordChanged bool, roToAlter []string, username string, host string, plugin string, password string) (managed.ExternalUpdate, error) {
 	if (checkUsePassword(cr) && passwordChanged) || checkAuthPluginChanged(cr) || checkResourceOptionsChanged(roToAlter) {
-		if err := c.executeAlterUserQuery(ctx, username, host, plugin, roToAlter, password); err != nil {
+		var pwd *string
+		if checkUsePassword(cr) {
+			pwd = &password
+		}
+
+		if err := c.executeAlterUserQuery(ctx, username, host, plugin, roToAlter, pwd); err != nil {
 			return managed.ExternalUpdate{}, err
 		}
 	}
@@ -427,17 +424,27 @@ func checkAuthPluginChanged(cr *v1alpha1.User) bool {
 		return true
 	}
 
-	if *cr.Status.AtProvider.AuthPlugin != defaultAuthPlugin(cr.Spec.ForProvider.AuthPlugin) {
+	if defaultAuthPlugin(cr.Spec.ForProvider.AuthPlugin) != "" && *cr.Status.AtProvider.AuthPlugin != defaultAuthPlugin(cr.Spec.ForProvider.AuthPlugin) {
 		return true
 	}
 
 	return false
 }
 
-func (c *external) executeAlterUserQuery(ctx context.Context, username string, host string, plugin string, resourceOptionsClauses []string, pw string) error {
+func (c *external) executeAlterUserQuery(ctx context.Context, username string, host string, plugin string, resourceOptionsClauses []string, pw *string) error {
 	passwordSection := ""
-	if pw != "" {
-		passwordSection = fmt.Sprintf(" BY %s", mysql.QuoteValue(pw))
+	if pw != nil {
+		if plugin == "" {
+			passwordSection = fmt.Sprintf(" BY %s", mysql.QuoteValue(*pw))
+		} else {
+			// MySQL: BY/AS, MariaDB: USING/AS
+			passwordSection = fmt.Sprintf(" AS %s", mysql.QuoteValue(*pw))
+		}
+	}
+
+	pluginSection := ""
+	if plugin != "" {
+		pluginSection = fmt.Sprintf(" WITH %s", plugin)
 	}
 
 	resourceOptions := ""
@@ -445,10 +452,11 @@ func (c *external) executeAlterUserQuery(ctx context.Context, username string, h
 		resourceOptions = fmt.Sprintf(" WITH %s", strings.Join(resourceOptionsClauses, " "))
 	}
 
-	query := fmt.Sprintf("ALTER USER %s@%s IDENTIFIED WITH %s%s%s",
+	query := fmt.Sprintf(
+		"ALTER USER %s@%s IDENTIFIED%s%s%s",
 		mysql.QuoteValue(username),
 		mysql.QuoteValue(host),
-		plugin,
+		pluginSection,
 		passwordSection,
 		resourceOptions,
 	)
@@ -462,9 +470,10 @@ func (c *external) executeAlterUserQuery(ctx context.Context, username string, h
 	return nil
 }
 
+// TODO: Remove? Use nil instead?
 func defaultAuthPlugin(authPlugin *string) string {
 	if authPlugin == nil {
-		return "mysql_native_password"
+		return ""
 	}
 
 	return *authPlugin
