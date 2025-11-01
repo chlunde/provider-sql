@@ -49,6 +49,10 @@ setup_postgresdb_tests(){
   # create grant
   "${KUBECTL}" apply -f ${projectdir}/examples/${API_TYPE}/postgresql/schema.yaml
 
+  echo_step "creating PostgresDB Extension resource"
+  # create extension
+  "${KUBECTL}" apply -f ${projectdir}/examples/${API_TYPE}/postgresql/extension.yaml
+
   echo_step "check if Role is ready"
   "${KUBECTL}" wait --timeout 2m --for condition=Ready -f ${projectdir}/examples/${API_TYPE}/postgresql/role.yaml > /dev/null
   echo_step_completed
@@ -63,6 +67,10 @@ setup_postgresdb_tests(){
 
   echo_step "check if schema is ready"
   "${KUBECTL}" wait --timeout 2m --for condition=Ready -f ${projectdir}/examples/${API_TYPE}/postgresql/schema.yaml > /dev/null
+  echo_step_completed
+
+  echo_step "check if extension is ready"
+  "${KUBECTL}" wait --timeout 2m --for condition=Ready -f ${projectdir}/examples/${API_TYPE}/postgresql/extension.yaml > /dev/null
   echo_step_completed
 }
 
@@ -127,6 +135,28 @@ check_schema_privileges(){
   echo_step_completed
 }
 
+check_extension_version_status(){
+  # check if extension version status is populated correctly
+  echo_step "check if extension version status is populated"
+
+  TARGET_DB='db1'
+  EXTENSION_NAME='hstore'
+  EXPECTED_VERSION='1.4'
+
+  # Check Kubernetes status field is populated
+  status_installed_version=$("${KUBECTL}" get extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db -o jsonpath='{.status.atProvider.installedVersion}')
+
+  if [[ "$status_installed_version" == "$EXPECTED_VERSION" ]]; then
+      echo "Extension status.atProvider.installedVersion is correctly populated: $status_installed_version"
+      echo_info "OK"
+  else
+      echo "Extension status.atProvider.installedVersion is NOT as expected. Found: $status_installed_version, Expected: $EXPECTED_VERSION"
+      echo_error "Not OK"
+  fi
+
+  echo_step_completed
+}
+
 setup_observe_only_database(){
   echo_step "create pre-existing database for observe only"
 
@@ -166,6 +196,7 @@ delete_postgresdb_resources(){
   "${KUBECTL}" delete --ignore-not-found=true -f "${projectdir}/examples/${API_TYPE}/postgresql/database.yaml"
   "${KUBECTL}" delete -f "${projectdir}/examples/${API_TYPE}/postgresql/role.yaml"
   "${KUBECTL}" delete -f "${projectdir}/examples/${API_TYPE}/postgresql/schema.yaml"
+  "${KUBECTL}" delete -f "${projectdir}/examples/${API_TYPE}/postgresql/extension.yaml"
   echo "${PROVIDER_CONFIG_POSTGRES_YAML}" | "${KUBECTL}" delete -f -
 
   # ----------- cleaning postgres related resources
@@ -189,5 +220,6 @@ integration_tests_postgres() {
   check_observe_only_database
   check_all_roles_privileges
   check_schema_privileges
+  check_extension_version_status
   delete_postgresdb_resources
 }

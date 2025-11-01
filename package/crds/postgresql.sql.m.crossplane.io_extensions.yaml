@@ -32,7 +32,10 @@ spec:
       name: EXTENSION
       type: string
     - jsonPath: .spec.forProvider.version
-      name: VERSION
+      name: DESIRED
+      type: string
+    - jsonPath: .status.atProvider.installedVersion
+      name: INSTALLED
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
@@ -219,6 +222,15 @@ spec:
           status:
             description: A ExtensionStatus represents the observed state of a Extension.
             properties:
+              atProvider:
+                description: ExtensionObservation are the observable fields of an
+                  Extension.
+                properties:
+                  installedVersion:
+                    description: InstalledVersion is the currently installed version
+                      of the extension.
+                    type: string
+                type: object
               conditions:
                 description: Conditions of the resource.
                 items:

@@ -161,6 +161,9 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.Wrap(err, errSelectExtension)
 	}
 
+	// Update status with the installed version
+	cr.Status.AtProvider.InstalledVersion = observed.Version
+
 	cr.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{

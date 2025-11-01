@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
@@ -190,6 +191,7 @@ func TestObserve(t *testing.T) {
 
 	type want struct {
 		o   managed.ExternalObservation
+		mg  resource.Managed
 		err error
 	}
 
@@ -293,6 +295,51 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
+		"SuccessWithStatusPopulated": {
+			reason: "Status should be populated with the installed version",
+			fields: fields{
+				db: mockDB{
+					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
+						bv := dest[0].(*string)
+						*bv = "1.4"
+						return nil
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Version: ptr.To("1.4"),
+						},
+					},
+				},
+			},
+			want: want{
+				o: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        true,
+					ResourceLateInitialized: false,
+				},
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Version: ptr.To("1.4"),
+						},
+					},
+					Status: v1alpha1.ExtensionStatus{
+						ResourceStatus: xpv1.ResourceStatus{
+							ConditionedStatus: xpv1.ConditionedStatus{
+								Conditions: []xpv1.Condition{xpv1.Available()},
+							},
+						},
+						AtProvider: v1alpha1.ExtensionObservation{
+							InstalledVersion: ptr.To("1.4"),
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -304,6 +351,11 @@ func TestObserve(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.want.o, got); diff != "" {
 				t.Errorf("\n%s\ne.Observe(...): -want, +got:\n%s\n", tc.reason, diff)
+			}
+			if tc.want.mg != nil {
+				if diff := cmp.Diff(tc.want.mg, tc.args.mg); diff != "" {
+					t.Errorf("\n%s\ne.Observe(...): -want managed resource, +got managed resource:\n%s\n", tc.reason, diff)
+				}
 			}
 		})
 	}

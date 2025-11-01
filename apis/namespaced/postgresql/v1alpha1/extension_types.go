@@ -64,9 +64,17 @@ type ExtensionSpec struct {
 	ForProvider              ExtensionParameters `json:"forProvider"`
 }
 
+// ExtensionObservation are the observable fields of an Extension.
+type ExtensionObservation struct {
+	// InstalledVersion is the currently installed version of the extension.
+	// +optional
+	InstalledVersion *string `json:"installedVersion,omitempty"`
+}
+
 // A ExtensionStatus represents the observed state of a Extension.
 type ExtensionStatus struct {
 	xpv1.ResourceStatus `json:",inline"`
+	AtProvider          ExtensionObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -77,7 +85,8 @@ type ExtensionStatus struct {
 // +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"
 // +kubebuilder:printcolumn:name="DATABASE",type="string",JSONPath=".spec.forProvider.database"
 // +kubebuilder:printcolumn:name="EXTENSION",type="string",JSONPath=".spec.forProvider.extension"
-// +kubebuilder:printcolumn:name="VERSION",type="string",JSONPath=".spec.forProvider.version"
+// +kubebuilder:printcolumn:name="DESIRED",type="string",JSONPath=".spec.forProvider.version"
+// +kubebuilder:printcolumn:name="INSTALLED",type="string",JSONPath=".status.atProvider.installedVersion"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:resource:scope=Namespaced,categories={crossplane,managed,sql}
 type Extension struct {
