@@ -37,6 +37,9 @@ spec:
     - jsonPath: .status.atProvider.installedVersion
       name: INSTALLED
       type: string
+    - jsonPath: .status.atProvider.availableVersion
+      name: AVAILABLE
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
       type: date
@@ -170,7 +173,8 @@ spec:
                     description: Schema for extension install.
                     type: string
                   version:
-                    description: Version of the extension to be installed.
+                    description: Version of the extension to be installed or upgraded
+                      to.
                     type: string
                 required:
                 - extension
@@ -268,6 +272,10 @@ spec:
                 description: ExtensionObservation are the observable fields of an
                   Extension.
                 properties:
+                  availableVersion:
+                    description: AvailableVersion is the latest available version
+                      of the extension.
+                    type: string
                   installedVersion:
                     description: InstalledVersion is the currently installed version
                       of the extension.

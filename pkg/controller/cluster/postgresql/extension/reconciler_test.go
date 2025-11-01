@@ -19,6 +19,7 @@ package extension
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	"github.com/crossplane-contrib/provider-sql/apis/cluster/postgresql/v1alpha1"
@@ -301,8 +302,14 @@ func TestObserve(t *testing.T) {
 				db: mockDB{
 					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
 						bv := dest[0].(*string)
-						*bv = "1.4"
-						return nil
+						// Distinguish between the two queries based on table name
+						if strings.Contains(q.String, "pg_extension") {
+							// Query for installed version from pg_extension
+							*bv = "1.4"
+							return nil
+						}
+						// Query for available version - return no rows (extension is up-to-date)
+						return sql.ErrNoRows
 					},
 				},
 			},
@@ -338,6 +345,140 @@ func TestObserve(t *testing.T) {
 						},
 					},
 				},
+			},
+		},
+		"SuccessWithAvailableVersion": {
+			reason: "Status should be populated with both installed and available versions",
+			fields: fields{
+				db: mockDB{
+					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
+						bv := dest[0].(*string)
+						// Distinguish between the two queries based on table name
+						if strings.Contains(q.String, "pg_extension") {
+							// Query for installed version from pg_extension
+							*bv = "1.4"
+						} else if strings.Contains(q.String, "pg_available_extension_versions") {
+							// Query for available version
+							*bv = "1.5"
+						}
+						return nil
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Version: ptr.To("1.4"),
+						},
+					},
+				},
+			},
+			want: want{
+				o: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        true,
+					ResourceLateInitialized: false,
+				},
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Version: ptr.To("1.4"),
+						},
+					},
+					Status: v1alpha1.ExtensionStatus{
+						ResourceStatus: xpv1.ResourceStatus{
+							ConditionedStatus: xpv1.ConditionedStatus{
+								Conditions: []xpv1.Condition{xpv1.Available()},
+							},
+						},
+						AtProvider: v1alpha1.ExtensionObservation{
+							InstalledVersion: ptr.To("1.4"),
+							AvailableVersion: ptr.To("1.5"),
+						},
+					},
+				},
+			},
+		},
+		"SuccessWithNoAvailableVersion": {
+			reason: "Status should be populated with installed version only when no newer version is available",
+			fields: fields{
+				db: mockDB{
+					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
+						bv := dest[0].(*string)
+						// Distinguish between the two queries based on table name
+						if strings.Contains(q.String, "pg_extension") {
+							// Query for installed version from pg_extension
+							*bv = "1.4"
+							return nil
+						}
+						// Query for available version - no rows found (extension is up-to-date)
+						return sql.ErrNoRows
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Version: ptr.To("1.4"),
+						},
+					},
+				},
+			},
+			want: want{
+				o: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        true,
+					ResourceLateInitialized: false,
+				},
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Version: ptr.To("1.4"),
+						},
+					},
+					Status: v1alpha1.ExtensionStatus{
+						ResourceStatus: xpv1.ResourceStatus{
+							ConditionedStatus: xpv1.ConditionedStatus{
+								Conditions: []xpv1.Condition{xpv1.Available()},
+							},
+						},
+						AtProvider: v1alpha1.ExtensionObservation{
+							InstalledVersion: ptr.To("1.4"),
+						},
+					},
+				},
+			},
+		},
+		"ErrQueryingAvailableVersion": {
+			reason: "We should return errors from querying available versions (except ErrNoRows)",
+			fields: fields{
+				db: mockDB{
+					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
+						bv := dest[0].(*string)
+						// Distinguish between the two queries based on table name
+						if strings.Contains(q.String, "pg_extension") {
+							// Query for installed version from pg_extension
+							*bv = "1.4"
+							return nil
+						}
+						// Query for available version returns an error
+						return errBoom
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Version: ptr.To("1.4"),
+						},
+					},
+				},
+			},
+			want: want{
+				err: errors.Wrap(errBoom, errSelectExtension),
 			},
 		},
 	}
@@ -444,6 +585,8 @@ func TestCreate(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
+	errBoom := errors.New("boom")
+
 	type fields struct {
 		db xsql.DB
 	}
@@ -473,24 +616,77 @@ func TestUpdate(t *testing.T) {
 				err: errors.New(errNotExtension),
 			},
 		},
-		"Success": {
-			reason: "No error should be returned when we successfully update a extension",
+		"SuccessNoVersion": {
+			reason: "No error and no update should happen when version is nil",
 			fields: fields{
 				db: &mockDB{
-					MockExec: func(ctx context.Context, q xsql.Query) error { return nil },
+					MockExec: func(ctx context.Context, q xsql.Query) error {
+						return errBoom // Should not be called
+					},
 				},
 			},
 			args: args{
 				mg: &v1alpha1.Extension{
 					Spec: v1alpha1.ExtensionSpec{
 						ForProvider: v1alpha1.ExtensionParameters{
-							Version: new(string),
+							Extension: "hstore",
+							Version:   nil,
 						},
 					},
 				},
 			},
 			want: want{
 				err: nil,
+			},
+		},
+		"SuccessWithVersion": {
+			reason: "Extension should be updated when version is specified",
+			fields: fields{
+				db: &mockDB{
+					MockExec: func(ctx context.Context, q xsql.Query) error {
+						expectedSQL := "ALTER EXTENSION \"hstore\" UPDATE TO \"1.5\""
+						if q.String != expectedSQL {
+							return errors.Errorf("unexpected SQL: got %q, want %q", q.String, expectedSQL)
+						}
+						return nil
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Extension: "hstore",
+							Version:   ptr.To("1.5"),
+						},
+					},
+				},
+			},
+			want: want{
+				err: nil,
+			},
+		},
+		"ErrUpdateExtension": {
+			reason: "Errors executing UPDATE should be returned",
+			fields: fields{
+				db: &mockDB{
+					MockExec: func(ctx context.Context, q xsql.Query) error {
+						return errBoom
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Extension{
+					Spec: v1alpha1.ExtensionSpec{
+						ForProvider: v1alpha1.ExtensionParameters{
+							Extension: "hstore",
+							Version:   ptr.To("1.5"),
+						},
+					},
+				},
+			},
+			want: want{
+				err: errors.Wrap(errBoom, errUpdateExtension),
 			},
 		},
 	}

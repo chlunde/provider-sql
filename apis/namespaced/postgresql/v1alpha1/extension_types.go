@@ -33,8 +33,7 @@ type ExtensionParameters struct {
 	// Extension name to be installed.
 	Extension string `json:"extension"`
 
-	// Version of the extension to be installed.
-	// +immutable
+	// Version of the extension to be installed or upgraded to.
 	// +optional
 	Version *string `json:"version,omitempty"`
 
@@ -69,6 +68,10 @@ type ExtensionObservation struct {
 	// InstalledVersion is the currently installed version of the extension.
 	// +optional
 	InstalledVersion *string `json:"installedVersion,omitempty"`
+
+	// AvailableVersion is the latest available version of the extension.
+	// +optional
+	AvailableVersion *string `json:"availableVersion,omitempty"`
 }
 
 // A ExtensionStatus represents the observed state of a Extension.
@@ -87,6 +90,7 @@ type ExtensionStatus struct {
 // +kubebuilder:printcolumn:name="EXTENSION",type="string",JSONPath=".spec.forProvider.extension"
 // +kubebuilder:printcolumn:name="DESIRED",type="string",JSONPath=".spec.forProvider.version"
 // +kubebuilder:printcolumn:name="INSTALLED",type="string",JSONPath=".status.atProvider.installedVersion"
+// +kubebuilder:printcolumn:name="AVAILABLE",type="string",JSONPath=".status.atProvider.availableVersion"
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:resource:scope=Namespaced,categories={crossplane,managed,sql}
 type Extension struct {

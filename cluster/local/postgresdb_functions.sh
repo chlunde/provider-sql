@@ -154,6 +154,24 @@ check_extension_version_status(){
       echo_error "Not OK"
   fi
 
+  # Check if availableVersion field is present (it may be empty if extension is up-to-date)
+  status_available_version=$("${KUBECTL}" get extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db -o jsonpath='{.status.atProvider.availableVersion}')
+
+  if [[ -n "$status_available_version" ]]; then
+      echo "Extension status.atProvider.availableVersion is populated: $status_available_version"
+      echo_info "OK - Available version found"
+
+      # Verify that available version is different from installed version
+      if [[ "$status_available_version" != "$status_installed_version" ]]; then
+          echo_info "Available version ($status_available_version) is different from installed version ($status_installed_version)"
+      else
+          echo_error "Available version should be different from installed version"
+      fi
+  else
+      echo "Extension status.atProvider.availableVersion is empty (extension may be up-to-date)"
+      echo_info "OK - No newer version available"
+  fi
+
   echo_step_completed
 }
 
@@ -185,6 +203,64 @@ check_observe_only_database(){
 
   # Clean up
   PGPASSWORD="${postgres_root_pw}" psql -h localhost -p 5432 -U postgres -wtAc "DROP DATABASE \"db-observe\";"
+
+  echo_step_completed
+}
+
+test_extension_upgrade(){
+  # test upgrading an extension to a newer version
+  echo_step "test upgrading extension to newer version"
+
+  TARGET_DB='db1'
+  EXTENSION_NAME='hstore'
+  INITIAL_VERSION='1.4'
+
+  # Query for available versions to find one we can upgrade to
+  available_versions=$(PGPASSWORD="${postgres_root_pw}" psql -h localhost -p 5432 -U postgres -d "$TARGET_DB" -wtAc "SELECT version FROM pg_available_extension_versions WHERE name = '$EXTENSION_NAME' AND installed = false ORDER BY version DESC;")
+
+  if [[ -z "$available_versions" ]]; then
+      echo "No available versions to upgrade to, skipping upgrade test"
+      echo_info "SKIP"
+      echo_step_completed
+      return
+  fi
+
+  # Get the first available version (latest)
+  UPGRADE_VERSION=$(echo "$available_versions" | head -n 1 | tr -d '[:space:]')
+
+  echo_info "Upgrading from $INITIAL_VERSION to $UPGRADE_VERSION"
+
+  # Update the Extension resource to request the upgrade
+  "${KUBECTL}" patch extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db --type=merge -p "{\"spec\":{\"forProvider\":{\"version\":\"$UPGRADE_VERSION\"}}}"
+
+  # Wait a bit for reconciliation
+  sleep 5
+
+  # Wait for the extension to be ready after upgrade
+  "${KUBECTL}" wait --timeout 2m --for condition=Ready extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db > /dev/null
+
+  # Check that the version was upgraded in PostgreSQL
+  actual_version=$(PGPASSWORD="${postgres_root_pw}" psql -h localhost -p 5432 -U postgres -d "$TARGET_DB" -wtAc "SELECT extversion FROM pg_extension WHERE extname = '$EXTENSION_NAME';")
+  actual_version=$(echo "$actual_version" | xargs)
+
+  if [[ "$actual_version" == "$UPGRADE_VERSION" ]]; then
+      echo "Extension successfully upgraded to version: $actual_version"
+      echo_info "OK"
+  else
+      echo "Extension upgrade FAILED. Expected: $UPGRADE_VERSION, Found: $actual_version"
+      echo_error "Not OK"
+  fi
+
+  # Check Kubernetes status reflects the upgrade
+  status_installed_version=$("${KUBECTL}" get extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db -o jsonpath='{.status.atProvider.installedVersion}')
+
+  if [[ "$status_installed_version" == "$UPGRADE_VERSION" ]]; then
+      echo "Kubernetes status correctly reflects upgraded version: $status_installed_version"
+      echo_info "OK"
+  else
+      echo "Kubernetes status does NOT reflect upgrade. Expected: $UPGRADE_VERSION, Found: $status_installed_version"
+      echo_error "Not OK"
+  fi
 
   echo_step_completed
 }
@@ -221,5 +297,6 @@ integration_tests_postgres() {
   check_all_roles_privileges
   check_schema_privileges
   check_extension_version_status
+  test_extension_upgrade
   delete_postgresdb_resources
 }

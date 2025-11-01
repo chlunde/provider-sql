@@ -46,6 +46,7 @@ const (
 	errNotExtension    = "managed resource is not a Extension custom resource"
 	errSelectExtension = "cannot select extension"
 	errCreateExtension = "cannot create extension"
+	errUpdateExtension = "cannot update extension"
 	errDropExtension   = "cannot drop extension"
 
 	maxConcurrency = 5
@@ -164,6 +165,33 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// Update status with the installed version
 	cr.Status.AtProvider.InstalledVersion = observed.Version
 
+	// Query the latest available version
+	availableVersion := new(string)
+	availableQuery := "SELECT " +
+		"version " +
+		"FROM pg_available_extension_versions " +
+		"WHERE name = $1 AND installed = false " +
+		"ORDER BY version DESC " +
+		"LIMIT 1"
+
+	err = c.db.Scan(ctx, xsql.Query{
+		String:     availableQuery,
+		Parameters: []interface{}{cr.Spec.ForProvider.Extension},
+	},
+		availableVersion,
+	)
+
+	// If no available version is found (all versions are installed or extension doesn't exist),
+	// we just skip updating the available version
+	if !xsql.IsNoRows(err) && err != nil {
+		return managed.ExternalObservation{}, errors.Wrap(err, errSelectExtension)
+	}
+
+	// Only set available version if we found one
+	if err == nil {
+		cr.Status.AtProvider.AvailableVersion = availableVersion
+	}
+
 	cr.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
@@ -191,13 +219,24 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	return managed.ExternalCreation{}, errors.Wrap(c.db.Exec(ctx, xsql.Query{String: b.String()}), errCreateExtension)
 }
 
-func (c *external) Update(_ context.Context, mg resource.Managed) (managed.ExternalUpdate, error) { //nolint:gocyclo
-	_, ok := mg.(*namespacedv1alpha1.Extension)
+func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) { //nolint:gocyclo
+	cr, ok := mg.(*namespacedv1alpha1.Extension)
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotExtension)
 	}
 
-	return managed.ExternalUpdate{}, nil
+	// Only update if a specific version is requested
+	if cr.Spec.ForProvider.Version == nil {
+		return managed.ExternalUpdate{}, nil
+	}
+
+	var b strings.Builder
+	b.WriteString("ALTER EXTENSION ")
+	b.WriteString(pq.QuoteIdentifier(cr.Spec.ForProvider.Extension))
+	b.WriteString(" UPDATE TO ")
+	b.WriteString(pq.QuoteIdentifier(*cr.Spec.ForProvider.Version))
+
+	return managed.ExternalUpdate{}, errors.Wrap(c.db.Exec(ctx, xsql.Query{String: b.String()}), errUpdateExtension)
 }
 
 func (c *external) Disconnect(ctx context.Context) error {
