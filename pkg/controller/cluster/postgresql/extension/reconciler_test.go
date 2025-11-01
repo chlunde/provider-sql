@@ -19,7 +19,6 @@ package extension
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"testing"
 
 	"github.com/crossplane-contrib/provider-sql/apis/cluster/postgresql/v1alpha1"
@@ -249,14 +248,20 @@ func TestObserve(t *testing.T) {
 			reason: "We should return no error if we can successfully select our extension",
 			fields: fields{
 				db: mockDB{
-					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error { return nil },
+					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
+						installedVer := dest[0].(*sql.NullString)
+						defaultVer := dest[1].(*sql.NullString)
+						*installedVer = sql.NullString{String: "1.0", Valid: true}
+						*defaultVer = sql.NullString{String: "1.0", Valid: true}
+						return nil
+					},
 				},
 			},
 			args: args{
 				mg: &v1alpha1.Extension{
 					Spec: v1alpha1.ExtensionSpec{
 						ForProvider: v1alpha1.ExtensionParameters{
-							Version: new(string),
+							Version: ptr.To("1.0"),
 						},
 					},
 				},
@@ -275,8 +280,10 @@ func TestObserve(t *testing.T) {
 			fields: fields{
 				db: mockDB{
 					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
-						bv := dest[0].(*string)
-						*bv = "blah"
+						installedVer := dest[0].(*sql.NullString)
+						defaultVer := dest[1].(*sql.NullString)
+						*installedVer = sql.NullString{String: "blah", Valid: true}
+						*defaultVer = sql.NullString{String: "blah", Valid: true}
 						return nil
 					},
 				},
@@ -301,15 +308,11 @@ func TestObserve(t *testing.T) {
 			fields: fields{
 				db: mockDB{
 					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
-						bv := dest[0].(*string)
-						// Distinguish between the two queries based on table name
-						if strings.Contains(q.String, "pg_extension") {
-							// Query for installed version from pg_extension
-							*bv = "1.4"
-							return nil
-						}
-						// Query for available version - return no rows (extension is up-to-date)
-						return sql.ErrNoRows
+						installedVer := dest[0].(*sql.NullString)
+						defaultVer := dest[1].(*sql.NullString)
+						*installedVer = sql.NullString{String: "1.4", Valid: true}
+						*defaultVer = sql.NullString{String: "1.4", Valid: true} // Same as installed
+						return nil
 					},
 				},
 			},
@@ -352,15 +355,10 @@ func TestObserve(t *testing.T) {
 			fields: fields{
 				db: mockDB{
 					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
-						bv := dest[0].(*string)
-						// Distinguish between the two queries based on table name
-						if strings.Contains(q.String, "pg_extension") {
-							// Query for installed version from pg_extension
-							*bv = "1.4"
-						} else if strings.Contains(q.String, "pg_available_extension_versions") {
-							// Query for available version
-							*bv = "1.5"
-						}
+						installedVer := dest[0].(*sql.NullString)
+						defaultVer := dest[1].(*sql.NullString)
+						*installedVer = sql.NullString{String: "1.4", Valid: true}
+						*defaultVer = sql.NullString{String: "1.5", Valid: true} // Different from installed
 						return nil
 					},
 				},
@@ -401,19 +399,15 @@ func TestObserve(t *testing.T) {
 			},
 		},
 		"SuccessWithNoAvailableVersion": {
-			reason: "Status should be populated with installed version only when no newer version is available",
+			reason: "Status should be populated with installed version only when default version is NULL",
 			fields: fields{
 				db: mockDB{
 					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
-						bv := dest[0].(*string)
-						// Distinguish between the two queries based on table name
-						if strings.Contains(q.String, "pg_extension") {
-							// Query for installed version from pg_extension
-							*bv = "1.4"
-							return nil
-						}
-						// Query for available version - no rows found (extension is up-to-date)
-						return sql.ErrNoRows
+						installedVer := dest[0].(*sql.NullString)
+						defaultVer := dest[1].(*sql.NullString)
+						*installedVer = sql.NullString{String: "1.4", Valid: true}
+						*defaultVer = sql.NullString{Valid: false} // NULL default version
+						return nil
 					},
 				},
 			},
@@ -449,36 +443,6 @@ func TestObserve(t *testing.T) {
 						},
 					},
 				},
-			},
-		},
-		"ErrQueryingAvailableVersion": {
-			reason: "We should return errors from querying available versions (except ErrNoRows)",
-			fields: fields{
-				db: mockDB{
-					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
-						bv := dest[0].(*string)
-						// Distinguish between the two queries based on table name
-						if strings.Contains(q.String, "pg_extension") {
-							// Query for installed version from pg_extension
-							*bv = "1.4"
-							return nil
-						}
-						// Query for available version returns an error
-						return errBoom
-					},
-				},
-			},
-			args: args{
-				mg: &v1alpha1.Extension{
-					Spec: v1alpha1.ExtensionSpec{
-						ForProvider: v1alpha1.ExtensionParameters{
-							Version: ptr.To("1.4"),
-						},
-					},
-				},
-			},
-			want: want{
-				err: errors.Wrap(errBoom, errSelectExtension),
 			},
 		},
 	}

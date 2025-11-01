@@ -18,6 +18,7 @@ package extension
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 
 	"github.com/lib/pq"
@@ -154,25 +155,27 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.New(errNotExtension)
 	}
 
-	// If the Extension exists, it will have all of these properties.
+	// Query both installed and default/latest available version in a single query
 	observed := v1alpha1.ExtensionParameters{
 		Version: new(string),
 	}
+	var installedVersion, defaultVersion sql.NullString
 
 	query := "SELECT " +
-		"extversion " +
-		"FROM pg_extension " +
-		"WHERE extname = $1"
+		"installed_version, " +
+		"default_version " +
+		"FROM pg_available_extensions " +
+		"WHERE name = $1"
 
 	err := c.db.Scan(ctx, xsql.Query{
 		String:     query,
 		Parameters: []interface{}{cr.Spec.ForProvider.Extension},
 	},
-		observed.Version,
+		&installedVersion,
+		&defaultVersion,
 	)
 
-	// If the database we try to connect on does not exist then
-	// there cannot be an extension on that database either.
+	// If the extension doesn't exist or database doesn't exist
 	if xsql.IsNoRows(err) || postgresql.IsInvalidCatalog(err) {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
@@ -180,34 +183,18 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.Wrap(err, errSelectExtension)
 	}
 
-	// Update status with the installed version
-	cr.Status.AtProvider.InstalledVersion = observed.Version
-
-	// Query the latest available version
-	availableVersion := new(string)
-	availableQuery := "SELECT " +
-		"version " +
-		"FROM pg_available_extension_versions " +
-		"WHERE name = $1 AND installed = false " +
-		"ORDER BY version DESC " +
-		"LIMIT 1"
-
-	err = c.db.Scan(ctx, xsql.Query{
-		String:     availableQuery,
-		Parameters: []interface{}{cr.Spec.ForProvider.Extension},
-	},
-		availableVersion,
-	)
-
-	// If no available version is found (all versions are installed or extension doesn't exist),
-	// we just skip updating the available version
-	if !xsql.IsNoRows(err) && err != nil {
-		return managed.ExternalObservation{}, errors.Wrap(err, errSelectExtension)
+	// Extension not installed yet
+	if !installedVersion.Valid {
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	// Only set available version if we found one
-	if err == nil {
-		cr.Status.AtProvider.AvailableVersion = availableVersion
+	// Update status with the installed version
+	observed.Version = &installedVersion.String
+	cr.Status.AtProvider.InstalledVersion = &installedVersion.String
+
+	// Update status with available version if different from installed
+	if defaultVersion.Valid && defaultVersion.String != installedVersion.String {
+		cr.Status.AtProvider.AvailableVersion = &defaultVersion.String
 	}
 
 	cr.SetConditions(xpv1.Available())

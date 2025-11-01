@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/v2/apis/common"
@@ -305,14 +306,20 @@ func TestObserve(t *testing.T) {
 			reason: "We should return no error if we can successfully select our extension",
 			fields: fields{
 				db: mockDB{
-					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error { return nil },
+					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
+						installedVer := dest[0].(*sql.NullString)
+						defaultVer := dest[1].(*sql.NullString)
+						*installedVer = sql.NullString{String: "1.0", Valid: true}
+						*defaultVer = sql.NullString{String: "1.0", Valid: true}
+						return nil
+					},
 				},
 			},
 			args: args{
 				mg: &v1alpha1.Extension{
 					Spec: v1alpha1.ExtensionSpec{
 						ForProvider: v1alpha1.ExtensionParameters{
-							Version: new(string),
+							Version: ptr.To("1.0"),
 						},
 					},
 				},
@@ -331,8 +338,10 @@ func TestObserve(t *testing.T) {
 			fields: fields{
 				db: mockDB{
 					MockScan: func(ctx context.Context, q xsql.Query, dest ...interface{}) error {
-						bv := dest[0].(*string)
-						*bv = "blah"
+						installedVer := dest[0].(*sql.NullString)
+						defaultVer := dest[1].(*sql.NullString)
+						*installedVer = sql.NullString{String: "blah", Valid: true}
+						*defaultVer = sql.NullString{String: "blah", Valid: true}
 						return nil
 					},
 				},
