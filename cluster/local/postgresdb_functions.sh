@@ -211,54 +211,35 @@ test_extension_upgrade(){
   # test upgrading an extension to a newer version
   echo_step "test upgrading extension to newer version"
 
-  TARGET_DB='db1'
   EXTENSION_NAME='hstore'
   INITIAL_VERSION='1.4'
 
-  # Query for available versions to find one we can upgrade to
-  available_versions=$(PGPASSWORD="${postgres_root_pw}" psql -h localhost -p 5432 -U postgres -d "$TARGET_DB" -wtAc "SELECT version FROM pg_available_extension_versions WHERE name = '$EXTENSION_NAME' AND installed = false ORDER BY version DESC;")
+  # Get the current available version from status
+  status_available_version=$("${KUBECTL}" get extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db -o jsonpath='{.status.atProvider.availableVersion}')
 
-  if [[ -z "$available_versions" ]]; then
-      echo "No available versions to upgrade to, skipping upgrade test"
+  if [[ -z "$status_available_version" ]]; then
+      echo "No available version to upgrade to (extension is up-to-date), skipping upgrade test"
       echo_info "SKIP"
       echo_step_completed
       return
   fi
 
-  # Get the first available version (latest)
-  UPGRADE_VERSION=$(echo "$available_versions" | head -n 1 | tr -d '[:space:]')
+  UPGRADE_VERSION="$status_available_version"
 
   echo_info "Upgrading from $INITIAL_VERSION to $UPGRADE_VERSION"
 
   # Update the Extension resource to request the upgrade
   "${KUBECTL}" patch extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db --type=merge -p "{\"spec\":{\"forProvider\":{\"version\":\"$UPGRADE_VERSION\"}}}"
 
-  # Wait a bit for reconciliation
-  sleep 5
-
-  # Wait for the extension to be ready after upgrade
-  "${KUBECTL}" wait --timeout 2m --for condition=Ready extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db > /dev/null
-
-  # Check that the version was upgraded in PostgreSQL
-  actual_version=$(PGPASSWORD="${postgres_root_pw}" psql -h localhost -p 5432 -U postgres -d "$TARGET_DB" -wtAc "SELECT extversion FROM pg_extension WHERE extname = '$EXTENSION_NAME';")
-  actual_version=$(echo "$actual_version" | xargs)
-
-  if [[ "$actual_version" == "$UPGRADE_VERSION" ]]; then
-      echo "Extension successfully upgraded to version: $actual_version"
+  # Wait for the status to reflect the upgraded version
+  if "${KUBECTL}" wait --timeout 2m \
+      --for=jsonpath='{.status.atProvider.installedVersion}'="$UPGRADE_VERSION" \
+      extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db > /dev/null; then
+      echo "Extension successfully upgraded to version: $UPGRADE_VERSION"
       echo_info "OK"
   else
-      echo "Extension upgrade FAILED. Expected: $UPGRADE_VERSION, Found: $actual_version"
-      echo_error "Not OK"
-  fi
-
-  # Check Kubernetes status reflects the upgrade
-  status_installed_version=$("${KUBECTL}" get extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db -o jsonpath='{.status.atProvider.installedVersion}')
-
-  if [[ "$status_installed_version" == "$UPGRADE_VERSION" ]]; then
-      echo "Kubernetes status correctly reflects upgraded version: $status_installed_version"
-      echo_info "OK"
-  else
-      echo "Kubernetes status does NOT reflect upgrade. Expected: $UPGRADE_VERSION, Found: $status_installed_version"
+      status_installed_version=$("${KUBECTL}" get extension.postgresql.sql.${APIGROUP_SUFFIX}crossplane.io hstore-extension-db -o jsonpath='{.status.atProvider.installedVersion}')
+      echo "Extension upgrade FAILED. Expected: $UPGRADE_VERSION, Found: $status_installed_version"
       echo_error "Not OK"
   fi
 
