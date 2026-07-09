@@ -1,0 +1,16 @@
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: issue-240-grant
+spec:
+  deletionPolicy: Delete
+  forProvider:
+    database: my-service
+    privileges:
+      - CONNECT
+    revokePublicOnDb: true
+    role: my-service_user
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    name: default
