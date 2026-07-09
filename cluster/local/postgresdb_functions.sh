@@ -31,6 +31,50 @@ setup_provider_config_postgres_no_tls() {
   "${KUBECTL}" apply -f "${scriptdir}/postgres.providerconfig.${API_TYPE}.yaml"
 }
 
+# Run user-provided scripts against the running PostgreSQL DB and cluster.
+# See cluster/local/scripts/README.md for the contract.
+run_custom_postgres_scripts() {
+  local dir="${CUSTOM_POSTGRES_SCRIPTS_DIR:-}"
+  if [ -z "${dir}" ]; then
+    return 0
+  fi
+  if [ ! -d "${dir}" ]; then
+    echo_error "CUSTOM_POSTGRES_SCRIPTS_DIR=${dir} is not a directory"
+  fi
+
+  echo_step "running custom postgres scripts from ${dir}"
+
+  export POSTGRES_HOST=localhost
+  export POSTGRES_PORT=5432
+  export POSTGRES_USER=postgres
+  export POSTGRES_PASSWORD="${postgres_root_pw}"
+  export POSTGRES_DB=postgres
+  export KUBECTL
+  export API_TYPE
+  export APIGROUP_SUFFIX
+
+  local f
+  for f in $(find "${dir}" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.yaml' -o -name '*.yml' -o -name '*.sh' \) | sort); do
+    case "${f}" in
+      *.sql)
+        echo_sub_step "psql < ${f}"
+        PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+          -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" \
+          -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+          -v ON_ERROR_STOP=1 -f "${f}"
+        ;;
+      *.yaml|*.yml)
+        echo_sub_step "kubectl apply ${f}"
+        envsubst '${APIGROUP_SUFFIX}' < "${f}" | "${KUBECTL}" apply -f -
+        ;;
+      *.sh)
+        echo_sub_step "bash ${f}"
+        bash "${f}"
+        ;;
+    esac
+  done
+}
+
 create_grantable_objects() {
   TARGET_DB='db1'
   TARGET_SCHEMA='public'
@@ -462,6 +506,7 @@ delete_extension_test() {
 integration_tests_postgres() {
   setup_postgresdb_no_tls
   setup_provider_config_postgres_no_tls
+  run_custom_postgres_scripts
   setup_observe_only_database
   setup_postgresdb_tests
   check_observe_only_database
@@ -472,5 +517,9 @@ integration_tests_postgres() {
   setup_extension_test
   check_extension_test
   delete_extension_test
-  delete_postgresdb_resources
+  if [ "$skipcleanup" != true ]; then
+    delete_postgresdb_resources
+  else
+    echo_step "skipcleanup=true: leaving PostgreSQL + port-forward (PID ${PORT_FORWARD_PID}) running"
+  fi
 }

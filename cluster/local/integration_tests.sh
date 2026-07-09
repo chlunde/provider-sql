@@ -81,9 +81,24 @@ if [ $? -ne 0 ]; then
 fi
 
 integration_tests_end() {
+  if [ "$skipcleanup" = true ]; then
+    echo_step "--- skipcleanup=true: leaving cluster + provider running ---"
+    echo_success " Integration tests succeeded (cleanup skipped)."
+    return
+  fi
   echo_step "--- CLEAN-UP ---"
   cleanup_provider
   echo_success " All integration tests succeeded!"
+}
+
+# Comma-separated subset of "mariadb,postgresql,mssql" selecting which engines
+# to exercise. Defaults to all three.
+DB_TYPES="${DB_TYPES:-mariadb,postgresql,mssql}"
+db_type_enabled() {
+  case ",${DB_TYPES}," in
+    *",$1,"*) return 0 ;;
+    *)        return 1 ;;
+  esac
 }
 
 setup_cluster() {
@@ -451,14 +466,24 @@ run_test() {
   echo_step "--- TESTING $testmain DONE IN ${duration}s ---"
 }
 
-TLS=true API_TYPE="namespaced" run_test integration_tests_mariadb
-TLS=false API_TYPE="cluster" run_test integration_tests_mariadb
+if db_type_enabled mariadb; then
+  TLS=true API_TYPE="namespaced" run_test integration_tests_mariadb
+  TLS=false API_TYPE="cluster" run_test integration_tests_mariadb
+fi
 
-TLS=false API_TYPE="cluster" run_test integration_tests_postgres
-TLS=false API_TYPE="namespaced" run_test integration_tests_postgres
+if db_type_enabled postgresql; then
+  TLS=false API_TYPE="cluster" run_test integration_tests_postgres
+  if [ "$skipcleanup" != true ]; then
+    # The "namespaced" rerun would race against a postgres StatefulSet that
+    # skipcleanup left running from the previous pass.
+    TLS=false API_TYPE="namespaced" run_test integration_tests_postgres
+  fi
+fi
 
-# no TLS=false variant - MSSQL uses built-in encryption
-TLS=true API_TYPE="cluster" run_test integration_tests_mssql
-TLS=true API_TYPE="namespaced" run_test integration_tests_mssql
+if db_type_enabled mssql; then
+  # no TLS=false variant - MSSQL uses built-in encryption
+  TLS=true API_TYPE="cluster" run_test integration_tests_mssql
+  TLS=true API_TYPE="namespaced" run_test integration_tests_mssql
+fi
 
 integration_tests_end
