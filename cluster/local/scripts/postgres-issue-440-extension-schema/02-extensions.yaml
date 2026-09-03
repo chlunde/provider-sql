@@ -1,0 +1,59 @@
+# Extensions exercising issue #440. Applied with envsubst on ${APIGROUP_SUFFIX}
+# so the same file serves the cluster-scoped and namespaced passes.
+#
+# The issue's case: postgis is non-relocatable, so the schema can only be
+# chosen at CREATE EXTENSION time.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Extension
+metadata:
+  name: i440-postgis
+spec:
+  forProvider:
+    extension: postgis
+    schema: gis
+    database: issue440_db
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# Relocatable extension into a quoted, mixed-case schema. Also the target of
+# the out-of-band drift probe (ALTER EXTENSION ... SET SCHEMA public).
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Extension
+metadata:
+  name: i440-hstore
+spec:
+  forProvider:
+    extension: hstore
+    schema: Mixed Case
+    database: issue440_db
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# Control: no schema. Must land in public and late-initialise schema=public.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Extension
+metadata:
+  name: i440-trgm
+spec:
+  forProvider:
+    extension: pg_trgm
+    database: issue440_db
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# Schema does not exist: Create must fail loudly, never Ready.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Extension
+metadata:
+  name: i440-nope
+spec:
+  forProvider:
+    extension: ltree
+    schema: nope
+    database: issue440_db
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
