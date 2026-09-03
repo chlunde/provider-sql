@@ -1,0 +1,141 @@
+# Grants exercising PR #436. Applied with envsubst on ${APIGROUP_SUFFIX} so the
+# same file serves the cluster-scoped and namespaced passes.
+#
+# The overload under test: two schema-qualified composite-type args.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pr436-composite
+spec:
+  forProvider:
+    database: pr436_db
+    schema: aws_s3
+    role: pr436_role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: table_import_from_s3
+        args:
+          - text
+          - text
+          - text
+          - aws_commons._s3_uri_1
+          - aws_commons._aws_credentials_1
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# The sibling overload. Both Grants must converge independently, and deleting
+# one must leave the other's privilege in place.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pr436-nine-text
+spec:
+  forProvider:
+    database: pr436_db
+    schema: aws_s3
+    role: pr436_role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: table_import_from_s3
+        args: [text, text, text, text, text, text, text, text, text]
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# Mixed case in the CR. The reconciler lower-cases args before splicing them
+# into SQL and before comparing with format_type(), so this must converge too.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pr436-mixed-case
+spec:
+  forProvider:
+    database: pr436_db
+    schema: aws_s3
+    role: pr436_role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: mixed_case
+        args:
+          - AWS_Commons.Mixed_Case_Probe
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# Known-limitation probe: a type in the public schema, written qualified.
+# GRANT succeeds; format_type() renders it unqualified; Observe never matches.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pr436-public-qualified
+spec:
+  forProvider:
+    database: pr436_db
+    schema: public
+    role: pr436_role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: pr436_public_type
+        args:
+          - public.pr436_pair
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# Known-limitation probe: a built-in type, written pg_catalog-qualified.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pr436-pgcatalog-qualified
+spec:
+  forProvider:
+    database: pr436_db
+    schema: public
+    role: pr436_role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: pr436_pgcatalog_type
+        args:
+          - pg_catalog.text
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# Known-limitation probe (pre-existing, not introduced by #436): "$" in a type
+# name is double-quoted by format_type(), so the Observe signature differs.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pr436-dollar-qualified
+spec:
+  forProvider:
+    database: pr436_db
+    schema: aws_s3
+    role: pr436_role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: dollar_type
+        args:
+          - aws_commons.cred$v2
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
