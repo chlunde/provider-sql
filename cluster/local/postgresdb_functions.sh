@@ -52,6 +52,13 @@ run_custom_postgres_scripts() {
   export KUBECTL
   export API_TYPE
   export APIGROUP_SUFFIX
+  # Namespaced managed resources require providerConfigRef.kind; cluster-scoped
+  # ones reject it. Substitute a whole line so one YAML serves both passes.
+  PROVIDERCONFIG_KIND_LINE=""
+  if [ "${API_TYPE}" = "namespaced" ]; then
+    PROVIDERCONFIG_KIND_LINE="kind: ProviderConfig"
+  fi
+  export PROVIDERCONFIG_KIND_LINE
 
   local f
   for f in $(find "${dir}" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.yaml' -o -name '*.yml' -o -name '*.sh' \) | sort); do
@@ -65,7 +72,7 @@ run_custom_postgres_scripts() {
         ;;
       *.yaml|*.yml)
         echo_sub_step "kubectl apply ${f}"
-        envsubst '${APIGROUP_SUFFIX}' < "${f}" | "${KUBECTL}" apply -f -
+        envsubst '${APIGROUP_SUFFIX} ${PROVIDERCONFIG_KIND_LINE}' < "${f}" | "${KUBECTL}" apply -f -
         ;;
       *.sh)
         echo_sub_step "bash ${f}"
