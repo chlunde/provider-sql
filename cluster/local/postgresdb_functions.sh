@@ -69,7 +69,9 @@ run_custom_postgres_scripts() {
         ;;
       *.sh)
         echo_sub_step "bash ${f}"
-        bash "${f}"
+        if ! bash "${f}"; then
+          echo_error "custom postgres script failed: ${f}"
+        fi
         ;;
     esac
   done

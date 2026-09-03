@@ -1,0 +1,52 @@
+# The 9-argument grant. Expected to hang at Ready=False, reason=Creating.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: routine-grant-multiarg
+spec:
+  deletionPolicy: Delete
+  forProvider:
+    database: routine-grant-db
+    schema: aws_s3
+    role: routine-grant-role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: table_import_from_s3
+        args:
+          - text
+          - text
+          - text
+          - text
+          - text
+          - text
+          - text
+          - text
+          - text
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    name: default
+---
+# The 1-argument control. Expected to reach Ready=True today. If this one also
+# fails, the cause is something other than the argument-count cartesian product.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: routine-grant-onearg
+spec:
+  deletionPolicy: Delete
+  forProvider:
+    database: routine-grant-db
+    schema: aws_s3
+    role: routine-grant-role
+    privileges:
+      - EXECUTE
+    routines:
+      - name: one_arg
+        args:
+          - text
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    name: default
