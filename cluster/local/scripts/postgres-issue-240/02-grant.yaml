@@ -3,7 +3,6 @@ kind: Grant
 metadata:
   name: issue-240-grant
 spec:
-  deletionPolicy: Delete
   forProvider:
     database: my-service
     privileges:
@@ -13,4 +12,5 @@ spec:
   managementPolicies:
     - '*'
   providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
     name: default

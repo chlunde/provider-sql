@@ -20,6 +20,25 @@ dispatches by extension:
 
 Numeric prefixes (`01-…`, `02-…`) are the simplest way to control order.
 
+`.yaml` files are piped through `envsubst` first, so one file can serve both
+passes:
+
+- write the API group as `postgresql.sql.${APIGROUP_SUFFIX}crossplane.io`;
+- write the provider config reference as
+
+  ```yaml
+    providerConfigRef:
+      ${PROVIDERCONFIG_KIND_LINE}
+      name: default
+  ```
+
+  which expands to `kind: ProviderConfig` on the namespaced pass and to a blank
+  line on the cluster pass (namespaced resources require the kind, cluster
+  ones reject it);
+- keep the spec to fields both CRD variants accept: the namespaced Grant has
+  no `spec.deletionPolicy`, and the API server rejects the whole document if
+  it is present.
+
 ## When the scripts run
 
 For PostgreSQL the hook fires inside `integration_tests_postgres` after
@@ -63,6 +82,8 @@ so you can inspect resources with `kubectl`.
 | Directory             | Reproduces                                           |
 |-----------------------|------------------------------------------------------|
 | `postgres-issue-240/` | https://github.com/crossplane-contrib/provider-sql/issues/240 — Grant on a DB the role already owns never reaches Ready |
+| `postgres-routine-grant/` | Routine Grant on a multi-argument function (Observe cross join, fixed on master); 1-arg control |
+| `postgres-pr-436-routine-args/` | https://github.com/crossplane-contrib/provider-sql/pull/436 — schema-qualified composite types in `routines[].args`: admission contract, overload disambiguation, re-reconcile stability, delete precision, plus informational probes for `public.`/`pg_catalog.`-qualified spellings |
 
 ## Example: reproducing issue #240
 

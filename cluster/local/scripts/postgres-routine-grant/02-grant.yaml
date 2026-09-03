@@ -4,7 +4,6 @@ kind: Grant
 metadata:
   name: routine-grant-multiarg
 spec:
-  deletionPolicy: Delete
   forProvider:
     database: routine-grant-db
     schema: aws_s3
@@ -26,6 +25,7 @@ spec:
   managementPolicies:
     - '*'
   providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
     name: default
 ---
 # The 1-argument control. Expected to reach Ready=True today. If this one also
@@ -35,7 +35,6 @@ kind: Grant
 metadata:
   name: routine-grant-onearg
 spec:
-  deletionPolicy: Delete
   forProvider:
     database: routine-grant-db
     schema: aws_s3
@@ -49,4 +48,5 @@ spec:
   managementPolicies:
     - '*'
   providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
     name: default
