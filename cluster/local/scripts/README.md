@@ -84,6 +84,22 @@ so you can inspect resources with `kubectl`.
 | `postgres-issue-240/` | https://github.com/crossplane-contrib/provider-sql/issues/240 — Grant on a DB the role already owns never reaches Ready |
 | `postgres-routine-grant/` | Routine Grant on a multi-argument function (Observe cross join, fixed on master); 1-arg control |
 | `postgres-pr-436-routine-args/` | https://github.com/crossplane-contrib/provider-sql/pull/436 — schema-qualified composite types in `routines[].args`: admission contract, overload disambiguation, re-reconcile stability, delete precision, plus informational probes for `public.`/`pg_catalog.`-qualified spellings |
+| `postgres-issue-440-extension-schema/` | https://github.com/crossplane-contrib/provider-sql/issues/440 — `Extension.spec.forProvider.schema`: postgis (non-relocatable) into `gis`, hstore into `"Mixed Case"`, late-init control, missing-schema rejection, out-of-band drift revert, impossible-move error surfacing, delete completeness. Needs `POSTGRES_IMAGE=imresamu/postgis:18-3.6` |
+
+## Choosing the PostgreSQL image
+
+`POSTGRES_VERSION=<tag>` picks a tag of the official `postgres` image (default
+`18`). `POSTGRES_IMAGE=<image>` replaces the whole image reference, for
+bundles that need extensions the official image lacks:
+
+```
+POSTGRES_IMAGE=imresamu/postgis:18-3.6 \
+  CUSTOM_POSTGRES_SCRIPTS_DIR=$PWD/cluster/local/scripts/postgres-issue-440-extension-schema \
+  DB_TYPES=postgresql make e2e
+```
+
+`imresamu/postgis` is used because the official `postgis/postgis` tags are
+amd64-only.
 
 ## Example: reproducing issue #240
 

@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: postgresql
-        image: postgres:${POSTGRES_VERSION}
+        image: ${POSTGRES_IMAGE}
         env:
         - name: POSTGRES_PASSWORD
           valueFrom:

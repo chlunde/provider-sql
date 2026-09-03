@@ -12,7 +12,8 @@ setup_postgresdb_no_tls() {
       --from-literal port="5432"
 
   scriptdir=$(dirname "$0")
-  POSTGRES_VERSION="${POSTGRES_VERSION:-18}" envsubst '${POSTGRES_VERSION}' < "${scriptdir}/postgres.server.yaml" | "${KUBECTL}" apply -f -
+  # POSTGRES_IMAGE overrides the whole image, e.g. a postgis build.
+  POSTGRES_IMAGE="${POSTGRES_IMAGE:-postgres:${POSTGRES_VERSION:-18}}" envsubst '${POSTGRES_IMAGE}' < "${scriptdir}/postgres.server.yaml" | "${KUBECTL}" apply -f -
 
   echo_step "Waiting for PostgreSQL to be ready"
   "${KUBECTL}" rollout status statefulset/postgresdb-postgresql --timeout=120s
