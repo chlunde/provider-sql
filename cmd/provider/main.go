@@ -39,6 +39,7 @@ import (
 
 	"github.com/crossplane-contrib/provider-sql/apis"
 	"github.com/crossplane-contrib/provider-sql/pkg/controller"
+	"github.com/crossplane-contrib/provider-sql/pkg/controller/settings"
 )
 
 func main() {
@@ -52,6 +53,7 @@ func main() {
 		enableManagementPolicies = app.Flag("enable-management-policies", "Enable/disable support for Management Policies.").Default("true").Envar("ENABLE_MANAGEMENT_POLICIES").Bool()
 		pollStateMetricInterval  = app.Flag("poll-state-metric", "State metric recording interval.").Default("5s").Duration()
 		metricsBindAddress       = app.Flag("metrics-bind-address", "The address the metrics endpoint binds to.").Default(":8080").String()
+		creationGracePeriod      = app.Flag("creation-grace-period", "How long after a successful create a resource that cannot be observed is still assumed to exist.").Default("30s").Envar("CREATION_GRACE_PERIOD").Duration()
 	)
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -102,6 +104,7 @@ func main() {
 		o.Features.Enable(feature.EnableBetaManagementPolicies)
 		log.Info("Beta feature enabled", "flag", feature.EnableBetaManagementPolicies)
 	}
+	settings.CreationGracePeriod = *creationGracePeriod
 
 	kingpin.FatalIfError(controller.Setup(mgr, o), "Cannot setup SQL controllers")
 	kingpin.FatalIfError(mgr.Start(ctrl.SetupSignalHandler()), "Cannot start controller manager")

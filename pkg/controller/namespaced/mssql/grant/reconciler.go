@@ -40,6 +40,7 @@ import (
 	"github.com/crossplane-contrib/provider-sql/pkg/clients/mssql"
 	"github.com/crossplane-contrib/provider-sql/pkg/clients/xsql"
 	"github.com/crossplane-contrib/provider-sql/pkg/controller/namespaced/mssql/provider"
+	"github.com/crossplane-contrib/provider-sql/pkg/controller/settings"
 )
 
 const (
@@ -63,6 +64,7 @@ func Setup(mgr ctrl.Manager, o xpcontroller.Options) error {
 		managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
+		managed.WithCreationGracePeriod(settings.CreationGracePeriod),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
