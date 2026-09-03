@@ -85,6 +85,7 @@ so you can inspect resources with `kubectl`.
 | `postgres-routine-grant/` | Routine Grant on a multi-argument function (Observe cross join, fixed on master); 1-arg control |
 | `postgres-pr-436-routine-args/` | https://github.com/crossplane-contrib/provider-sql/pull/436 — schema-qualified composite types in `routines[].args`: admission contract, overload disambiguation, re-reconcile stability, delete precision, plus informational probes for `public.`/`pg_catalog.`-qualified spellings |
 | `postgres-issue-440-extension-schema/` | https://github.com/crossplane-contrib/provider-sql/issues/440 — `Extension.spec.forProvider.schema`: postgis (non-relocatable) into `gis`, hstore into `"Mixed Case"`, late-init control, missing-schema rejection, out-of-band drift revert, impossible-move error surfacing, delete completeness. Needs `POSTGRES_IMAGE=imresamu/postgis:18-3.6` |
+| `postgres-pr-442-role-password/` | https://github.com/crossplane-contrib/provider-sql/pull/442 — Role password loss on restore (#441): recreate with empty status, Update failing after `ALTER ROLE PASSWORD`, trigger rotation, no-op reconcile, delete. Logins run inside the postgres pod via the Service (the port-forward is loopback and trusted). Probes: extra rotation after recreate, future-dated trigger churn |
 
 ## Choosing the PostgreSQL image
 
