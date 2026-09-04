@@ -21,8 +21,17 @@ setup_mssql() {
   echo_step "Waiting for MSSQL Server to be ready"
   "${KUBECTL}" rollout status statefulset/mssql --timeout=300s
 
-  # Wait a bit more for MSSQL to be fully ready for connections
-  sleep 30
+  # Readiness only proves sa can log in on localhost; confirm the
+  # in-cluster path the provider uses before handing the server over.
+  local i
+  for i in $(seq 1 30); do
+    if "${KUBECTL}" exec mssql-0 -- /opt/mssql-tools18/bin/sqlcmd \
+        -S mssql.default.svc.cluster.local -U sa -P "${MSSQL_SA_PW}" -C -Q "SELECT 1" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo_error "MSSQL Server did not accept connections via the Service"
 }
 
 cleanup_mssql() {
@@ -38,7 +47,7 @@ setup_mssql_provider_config() {
 
 cleanup_mssql_provider_config() {
   echo_step "cleaning up MSSQL provider config"
-  "${KUBECTL}" delete providerconfig.mssql.sql.${APIGROUP_SUFFIX}crossplane.io default --ignore-not-found=true
+  delete_provider_config "mssql.sql.${APIGROUP_SUFFIX}crossplane.io"
 }
 
 test_create_mssql_database() {
@@ -73,8 +82,9 @@ test_update_mssql_user_password() {
   # Force reconcile by adding annotation
   "${KUBECTL}" annotate -f ${projectdir}/examples/${API_TYPE}/mssql/user.yaml reconcile=now
 
-  # Wait a bit for password update
-  sleep 10
+  echo_info "check if connection secret has been updated"
+  wait_until 30 '[ "$("${KUBECTL}" get secret example-connection-secret -ojsonpath="{.data.password}" | base64 --decode)" = "NewTest123!" ]' \
+    || echo_error "connection secret was not updated with the new password"
 
   echo_step_completed
 }
@@ -156,13 +166,13 @@ cleanup_mssql_test_resources() {
   "${KUBECTL}" delete secret example-pw --ignore-not-found=true
 }
 
+# The server is installed once for both passes (see integration_tests.sh);
+# each pass deletes every resource it created.
 integration_tests_mssql() {
-  setup_mssql
   setup_mssql_provider_config
 
   test_mssql_all
 
   cleanup_mssql_test_resources
   cleanup_mssql_provider_config
-  cleanup_mssql
 }

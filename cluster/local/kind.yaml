@@ -1,0 +1,21 @@
+# Cluster config for the e2e suite. The cluster lives for one run and is
+# deleted afterwards, so it is tuned for start-up speed, not durability.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+kubeadmConfigPatches:
+# Pull the run's images concurrently instead of one at a time. Matters on
+# a cold cache (CI), where the node fetches crossplane, the sidecar and
+# three database images.
+- |
+  kind: KubeletConfiguration
+  serializeImagePulls: false
+  maxParallelImagePulls: 4
+# Nothing in this cluster outlives the run, so etcd need not fsync.
+- |
+  kind: ClusterConfiguration
+  etcd:
+    local:
+      extraArgs:
+        unsafe-no-fsync: "true"

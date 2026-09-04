@@ -1,0 +1,20 @@
+# Node image for the e2e cluster: the stock kind node plus a CNI config
+# file that is already in place when the kubelet starts.
+#
+# Normally that file is written by kindnetd, which starts its informers and
+# then enters a reconcile loop whose ticker waits at the end of the
+# iteration. Its first pass lists zero nodes and does nothing, so the file
+# only appears on the second pass, one 10s tick later. containerd reports
+# NetworkReady off that file, so the node stays NotReady for that whole
+# tick and `kind create --wait` sits there: 26s stock versus 9s with the
+# file pre-seeded.
+#
+# "mtu" is deliberately absent: the ptp plugin then lets the kernel pick,
+# so the same file is correct on a host with any MTU. kindnetd still runs
+# and rewrites the file with the node's real MTU a few seconds later.
+#
+# Single-node only. 10.244.0.0/24 is the first node's pod CIDR; a second
+# node would need its own.
+ARG BASE
+FROM ${BASE}
+COPY kindnet.conflist /etc/cni/net.d/10-kindnet.conflist

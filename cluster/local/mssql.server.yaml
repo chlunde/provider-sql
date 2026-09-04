@@ -50,23 +50,25 @@ spec:
             - /bin/bash
             - -c
             - '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1"'
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          # Poll early and often: the pod is Ready the moment sa can log in,
+          # not 30s later. failureThreshold covers a slow (emulated) start.
+          initialDelaySeconds: 5
+          periodSeconds: 2
           timeoutSeconds: 5
+          failureThreshold: 120
         livenessProbe:
           exec:
             command:
             - /bin/bash
             - -c
             - '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1"'
-          initialDelaySeconds: 60
+          # Must not fire before a slow start has finished, or the container
+          # gets restarted mid-boot.
+          initialDelaySeconds: 240
           periodSeconds: 30
           timeoutSeconds: 5
-  volumeClaimTemplates:
-  - metadata:
-      name: data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: 2Gi
+      volumes:
+      # emptyDir, not a PVC: the data never outlives the test run, and a
+      # claim adds a provisioner round trip to every start-up.
+      - name: data
+        emptyDir: {}

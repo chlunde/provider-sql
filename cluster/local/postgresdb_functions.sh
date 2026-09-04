@@ -343,8 +343,10 @@ check_all_privileges_table_grant(){
 setup_observe_only_database(){
   echo_step "create pre-existing database for observe only"
 
+  # The server is shared by both passes and the first pass leaves this
+  # database behind on purpose (observe only), so start from scratch.
   local datname
-  datname="$(PGPASSWORD="${postgres_root_pw}" psql -h localhost -p 5432 -U postgres -wtAc "CREATE DATABASE \"db-observe\";")"
+  datname="$(PGPASSWORD="${postgres_root_pw}" psql -h localhost -p 5432 -U postgres -wtA -c "DROP DATABASE IF EXISTS \"db-observe\";" -c "CREATE DATABASE \"db-observe\";")"
 
   echo_step_completed
 }
@@ -396,10 +398,11 @@ delete_postgresdb_resources(){
   "${KUBECTL}" delete --ignore-not-found=true -f "${projectdir}/examples/${API_TYPE}/postgresql/database.yaml"
   "${KUBECTL}" delete -f "${projectdir}/examples/${API_TYPE}/postgresql/role.yaml"
   "${KUBECTL}" delete -f "${projectdir}/examples/${API_TYPE}/postgresql/schema.yaml"
-  echo "${PROVIDER_CONFIG_POSTGRES_YAML}" | "${KUBECTL}" delete -f -
+  delete_provider_config "postgresql.sql.${APIGROUP_SUFFIX}crossplane.io"
+}
 
-  # ----------- cleaning postgres related resources
-
+# Tear down the server shared by both passes.
+cleanup_postgresdb(){
   echo_step "kill port-forwarding"
   kill $PORT_FORWARD_PID
 
@@ -459,8 +462,9 @@ delete_extension_test() {
   echo_step_completed
 }
 
+# The server is installed once for both passes (see integration_tests.sh);
+# each pass deletes every resource it created.
 integration_tests_postgres() {
-  setup_postgresdb_no_tls
   setup_provider_config_postgres_no_tls
   setup_observe_only_database
   setup_postgresdb_tests

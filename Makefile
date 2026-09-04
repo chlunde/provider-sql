@@ -89,7 +89,7 @@ CROSSPLANE_HELM_CHART_VERSION ?=
 POSTGRES_VERSION ?= 18
 
 # Run integration tests.
-test-integration: $(KIND) $(KUBECTL) $(CROSSPLANE_CLI) $(HELM)
+test-integration: $(KIND) $(KUBECTL) $(CROSSPLANE_CLI) $(HELM) $(YQ)
 	@$(INFO) running integration tests using kind $(KIND_VERSION)
 	@KIND_NODE_IMAGE_TAG=${KIND_NODE_IMAGE_TAG} \
 	  CROSSPLANE_HELM_CHANNEL=${CROSSPLANE_HELM_CHANNEL} \

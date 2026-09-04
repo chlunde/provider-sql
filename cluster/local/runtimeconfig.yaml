@@ -1,0 +1,23 @@
+# DeploymentRuntimeConfig for the e2e provider. local.xpkg.deploy sets
+# metadata.name and the image; everything else is ours.
+#
+# --creation-grace-period: crossplane-runtime keeps a just-created resource
+# alive for 30s when Observe cannot find it, to absorb eventually consistent
+# APIs. Every e2e delete of a fresh resource would wait that long (plus
+# backoff, ~41s). SQL engines are transactional, so 1s is enough here.
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: runtimeconfig-provider-sql
+spec:
+  deploymentTemplate:
+    spec:
+      selector: {}
+      strategy: {}
+      template:
+        spec:
+          containers:
+          - name: package-runtime
+            args:
+            - --debug
+            - --creation-grace-period=1s

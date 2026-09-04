@@ -30,16 +30,22 @@ spec:
       - name: mariadb
         image: mariadb:12
         args:
+        # Durability off: the data is thrown away at the end of the run.
+        - --innodb-flush-log-at-trx-commit=0
+        - --innodb-doublewrite=0
+        - --skip-log-bin
         - --ssl
-        - --require-secure-transport=ON
         - --ssl-ca=/etc/mysql/certs/ca-cert.pem
         - --ssl-cert=/etc/mysql/certs/server-cert.pem
         - --ssl-key=/etc/mysql/certs/server-key.pem
         env:
+        # Its own secret, not the provider's connection secret: this one
+        # server serves both passes, and each pass rewrites the connection
+        # secret with the credentials it is testing.
         - name: MARIADB_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mariadb-creds
+              name: mariadb-root
               key: password
         ports:
         - containerPort: 3306
@@ -57,8 +63,8 @@ spec:
             - bash
             - -c
             - mariadb -uroot -p${MARIADB_ROOT_PASSWORD} -e "SELECT 1"
-          initialDelaySeconds: 10
-          periodSeconds: 5
+          initialDelaySeconds: 2
+          periodSeconds: 2
       volumes:
       - name: data
         emptyDir: {}

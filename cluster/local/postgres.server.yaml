@@ -29,6 +29,10 @@ spec:
       containers:
       - name: postgresql
         image: postgres:${POSTGRES_VERSION}
+        # Durability off: this database is thrown away at the end of the
+        # run, and CREATE DATABASE (which the tests do a lot) is dominated
+        # by fsync.
+        args: ["-c", "fsync=off", "-c", "full_page_writes=off", "-c", "synchronous_commit=off"]
         env:
         - name: POSTGRES_PASSWORD
           valueFrom:
@@ -46,8 +50,8 @@ spec:
             - pg_isready
             - -U
             - postgres
-          initialDelaySeconds: 5
-          periodSeconds: 5
+          initialDelaySeconds: 2
+          periodSeconds: 2
       volumes:
       - name: data
         emptyDir: {}
