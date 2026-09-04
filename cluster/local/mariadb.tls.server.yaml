@@ -62,9 +62,15 @@ spec:
             command:
             - bash
             - -c
-            - mariadb -uroot -p${MARIADB_ROOT_PASSWORD} -e "SELECT 1"
-          initialDelaySeconds: 2
-          periodSeconds: 2
+            # Over TCP on purpose. The entrypoint initialises the data
+            # directory against a temporary server started with
+            # --skip-networking, and sets the root password while it is
+            # up, so a socket probe reports ready during that window and
+            # the pod can go Ready before anything can reach it through
+            # the Service.
+            - mariadb -h 127.0.0.1 --protocol=TCP -uroot -p${MARIADB_ROOT_PASSWORD} -e "SELECT 1"
+          initialDelaySeconds: 1
+          periodSeconds: 1
       volumes:
       - name: data
         emptyDir: {}

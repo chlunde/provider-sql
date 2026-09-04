@@ -52,10 +52,10 @@ spec:
             - '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1"'
           # Poll early and often: the pod is Ready the moment sa can log in,
           # not 30s later. failureThreshold covers a slow (emulated) start.
-          initialDelaySeconds: 5
-          periodSeconds: 2
+          initialDelaySeconds: 1
+          periodSeconds: 1
           timeoutSeconds: 5
-          failureThreshold: 120
+          failureThreshold: 240
         livenessProbe:
           exec:
             command:

@@ -34,6 +34,8 @@ spec:
         # by fsync.
         args: ["-c", "fsync=off", "-c", "full_page_writes=off", "-c", "synchronous_commit=off"]
         env:
+        - name: POSTGRES_INITDB_ARGS
+          value: --no-sync
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -47,11 +49,18 @@ spec:
         readinessProbe:
           exec:
             command:
+            # Over TCP on purpose. The entrypoint runs a temporary server
+            # with listen_addresses='' while it initialises the cluster,
+            # and a socket probe reports ready against that one - before
+            # any TCP listener exists, and before the temporary server is
+            # shut down again.
             - pg_isready
+            - -h
+            - 127.0.0.1
             - -U
             - postgres
-          initialDelaySeconds: 2
-          periodSeconds: 2
+          initialDelaySeconds: 1
+          periodSeconds: 1
       volumes:
       - name: data
         emptyDir: {}
