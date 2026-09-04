@@ -362,12 +362,15 @@ setup_crossplane() {
   # the "patched" label, which customLabels supplies.
   #
   # No --wait either: we wait for the one pod those two targets need.
-  # The chart derives GOMAXPROCS from limits.cpu via the downward API, and
-  # its default 500m rounds down to one thread. Everything Crossplane does
-  # at start-up is one-off CPU work: generating certificates, decoding 1MB
-  # of core CRDs, then parsing our package and establishing 39 more.
-  # Raising the limit does not change what is requested, so scheduling on
-  # the single node is unaffected.
+  # The chart's default limits.cpu of 500m caps Crossplane at half a core
+  # for start-up work that is one-off and CPU-bound: generating
+  # certificates, decoding 1MB of core CRDs, then parsing our package and
+  # establishing 39 more. (The chart also derives GOMAXPROCS from that
+  # limit, which is the right setting for the quota - the quota is what
+  # binds.) The rbac-manager's 100m matters too: a provider cannot
+  # authenticate until it has created the revision's ClusterRoleBinding.
+  # Raising limits does not change requests, so scheduling on the single
+  # node is unaffected.
   #
   # webhooks: nothing here has a conversion or admission webhook, and the
   # one shipped webhook only matches objects labelled crossplane.io/in-use.
@@ -376,8 +379,8 @@ setup_crossplane() {
     crossplane-channel/crossplane \
     --version "${chart_version}" \
     --set-string customLabels.patched=true \
-    --set resourcesCrossplane.limits.cpu=4 \
-    --set resourcesRBACManager.limits.cpu=2 \
+    --set "resourcesCrossplane.limits.cpu=${CROSSPLANE_CPU_LIMIT:-4}" \
+    --set "resourcesRBACManager.limits.cpu=${RBAC_MANAGER_CPU_LIMIT:-2}" \
     --set webhooks.enabled=false \
     --set leaderElection=false \
     --set rbacManager.leaderElection=false \
