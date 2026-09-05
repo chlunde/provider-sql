@@ -1,0 +1,18 @@
+# Schema grant whose COMMIT is rejected by the deferred trigger in 01-setup.sql.
+# The GRANT statement itself succeeds; only COMMIT fails.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: extx-commit-fail
+spec:
+  forProvider:
+    database: extx_db
+    schema: extx_schema
+    role: extx_role
+    privileges:
+      - USAGE
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
