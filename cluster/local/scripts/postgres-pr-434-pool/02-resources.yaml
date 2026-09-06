@@ -1,0 +1,52 @@
+# One Database plus three resources whose controllers connect *into* it
+# (Schema, Extension, schema-level Grant). With a shared pool their sessions
+# outlive the reconcile; the Database delete at the end shows whether
+# DROP DATABASE still succeeds.
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Database
+metadata:
+  name: pr434-db
+spec:
+  forProvider: {}
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Schema
+metadata:
+  name: pr434-schema
+spec:
+  forProvider:
+    database: pr434-db
+    role: pr434_role
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Extension
+metadata:
+  name: pr434-hstore
+spec:
+  forProvider:
+    extension: hstore
+    database: pr434-db
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+apiVersion: postgresql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pr434-schema-usage
+spec:
+  forProvider:
+    database: pr434-db
+    schema: pr434-schema
+    role: pr434_grantee
+    privileges:
+      - USAGE
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
