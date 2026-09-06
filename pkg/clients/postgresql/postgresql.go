@@ -101,11 +101,10 @@ func (c postgresDB) ExecTx(ctx context.Context, ql []xsql.Query) error {
 
 // Exec the supplied query.
 func (c postgresDB) Exec(ctx context.Context, q xsql.Query) error {
-	d, err := sql.Open("postgres", c.dsn)
+	d, err := pool.Get(driverName, c.dsn, c.pool)
 	if err != nil {
 		return err
 	}
-	defer d.Close() //nolint:errcheck
 
 	_, err = d.ExecContext(ctx, q.String, q.Parameters...)
 	return err
@@ -113,11 +112,10 @@ func (c postgresDB) Exec(ctx context.Context, q xsql.Query) error {
 
 // Query the supplied query.
 func (c postgresDB) Query(ctx context.Context, q xsql.Query) (*sql.Rows, error) {
-	d, err := sql.Open("postgres", c.dsn)
+	d, err := pool.Get(driverName, c.dsn, c.pool)
 	if err != nil {
 		return nil, err
 	}
-	defer d.Close() //nolint:errcheck
 
 	rows, err := d.QueryContext(ctx, q.String, q.Parameters...)
 	return rows, err
@@ -125,11 +123,10 @@ func (c postgresDB) Query(ctx context.Context, q xsql.Query) (*sql.Rows, error) 
 
 // Scan the results of the supplied query into the supplied destination.
 func (c postgresDB) Scan(ctx context.Context, q xsql.Query, dest ...interface{}) error {
-	db, err := sql.Open("postgres", c.dsn)
+	db, err := pool.Get(driverName, c.dsn, c.pool)
 	if err != nil {
 		return err
 	}
-	defer db.Close() //nolint:errcheck
 
 	return db.QueryRowContext(ctx, q.String, q.Parameters...).Scan(dest...)
 }
@@ -147,11 +144,10 @@ func (c postgresDB) GetConnectionDetails(username, password string) managed.Conn
 // GetServerVersion returns the PostgreSQL server version as an integer
 // For example, PostgreSQL 16.2 would return 160200.
 func (c postgresDB) GetServerVersion(ctx context.Context) (int, error) {
-	db, err := sql.Open("postgres", c.dsn)
+	db, err := pool.Get(driverName, c.dsn, c.pool)
 	if err != nil {
 		return 0, err
 	}
-	defer db.Close() //nolint:errcheck
 
 	var version int
 	err = db.QueryRowContext(ctx, "SELECT current_setting('server_version_num')::int").Scan(&version)
