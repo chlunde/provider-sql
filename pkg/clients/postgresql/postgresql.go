@@ -11,7 +11,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/lib/pq/pqerror"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 )
 
@@ -38,10 +38,10 @@ type postgresDB struct {
 // The pool config tunes the shared, DSN-keyed connection pool used for all
 // queries issued by this client.
 func New(creds map[string][]byte, database, sslmode string, poolCfg pool.Config) xsql.DB {
-	endpoint := string(creds[xpv1.ResourceCredentialsSecretEndpointKey])
-	port := string(creds[xpv1.ResourceCredentialsSecretPortKey])
-	username := string(creds[xpv1.ResourceCredentialsSecretUserKey])
-	password := string(creds[xpv1.ResourceCredentialsSecretPasswordKey])
+	endpoint := string(creds[xpv2.CredentialsSecretEndpointKey])
+	port := string(creds[xpv2.CredentialsSecretPortKey])
+	username := string(creds[xpv2.CredentialsSecretUserKey])
+	password := string(creds[xpv2.CredentialsSecretPasswordKey])
 	dsn := DSN(username, password, endpoint, port, database, sslmode)
 
 	return postgresDB{
@@ -137,10 +137,10 @@ func (c postgresDB) Scan(ctx context.Context, q xsql.Query, dest ...interface{})
 // GetConnectionDetails returns the connection details for a user of this DB
 func (c postgresDB) GetConnectionDetails(username, password string) managed.ConnectionDetails {
 	return managed.ConnectionDetails{
-		xpv1.ResourceCredentialsSecretUserKey:     []byte(username),
-		xpv1.ResourceCredentialsSecretPasswordKey: []byte(password),
-		xpv1.ResourceCredentialsSecretEndpointKey: []byte(c.endpoint),
-		xpv1.ResourceCredentialsSecretPortKey:     []byte(c.port),
+		xpv2.CredentialsSecretUserKey:     []byte(username),
+		xpv2.CredentialsSecretPasswordKey: []byte(password),
+		xpv2.CredentialsSecretEndpointKey: []byte(c.endpoint),
+		xpv2.CredentialsSecretPortKey:     []byte(c.port),
 	}
 }
 

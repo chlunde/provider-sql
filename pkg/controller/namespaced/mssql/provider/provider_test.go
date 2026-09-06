@@ -12,8 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/crossplane/crossplane-runtime/v2/apis/common"
-	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v2"
+	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/test"
 
 	"github.com/crossplane-contrib/provider-sql/apis/namespaced/mssql/v1alpha1"
@@ -41,7 +40,7 @@ func TestGetProviderConfig(t *testing.T) {
 				mg: &v1alpha1.Database{
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{Kind: "NotValid"},
+							ProviderConfigReference: &xpv2.ProviderConfigReference{Kind: "NotValid"},
 						},
 					},
 				},
@@ -56,7 +55,7 @@ func TestGetProviderConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{Kind: v1alpha1.ProviderConfigKind},
+							ProviderConfigReference: &xpv2.ProviderConfigReference{Kind: v1alpha1.ProviderConfigKind},
 						},
 					},
 				},
@@ -71,7 +70,7 @@ func TestGetProviderConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{Kind: v1alpha1.ClusterProviderConfigKind},
+							ProviderConfigReference: &xpv2.ProviderConfigReference{Kind: v1alpha1.ClusterProviderConfigKind},
 						},
 					},
 				},
@@ -86,7 +85,7 @@ func TestGetProviderConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{
+							ProviderConfigReference: &xpv2.ProviderConfigReference{
 								Kind: v1alpha1.ProviderConfigKind,
 								Name: "example",
 							},
@@ -103,7 +102,7 @@ func TestGetProviderConfig(t *testing.T) {
 					MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 						switch o := obj.(type) {
 						case *v1alpha1.ProviderConfig:
-							o.Spec.Credentials.ConnectionSecretRef = common.LocalSecretReference{Name: "example"}
+							o.Spec.Credentials.ConnectionSecretRef = xpv2.LocalSecretReference{Name: "example"}
 						case *corev1.Secret:
 							return errBoom
 						}
@@ -114,7 +113,7 @@ func TestGetProviderConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{
+							ProviderConfigReference: &xpv2.ProviderConfigReference{
 								Kind: v1alpha1.ProviderConfigKind,
 								Name: "example",
 							},
@@ -131,7 +130,7 @@ func TestGetProviderConfig(t *testing.T) {
 					MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 						switch o := obj.(type) {
 						case *v1alpha1.ProviderConfig:
-							o.Spec.Credentials.ConnectionSecretRef = common.LocalSecretReference{Name: "example"}
+							o.Spec.Credentials.ConnectionSecretRef = xpv2.LocalSecretReference{Name: "example"}
 						case *corev1.Secret:
 							o.Data = map[string][]byte{"username": []byte("u")}
 						}
@@ -142,7 +141,7 @@ func TestGetProviderConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{
+							ProviderConfigReference: &xpv2.ProviderConfigReference{
 								Kind: v1alpha1.ProviderConfigKind,
 								Name: "example",
 							},
@@ -162,7 +161,7 @@ func TestGetProviderConfig(t *testing.T) {
 					MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 						switch o := obj.(type) {
 						case *v1alpha1.ProviderConfig:
-							o.Spec.Credentials.ConnectionSecretRef = common.LocalSecretReference{Name: "example"}
+							o.Spec.Credentials.ConnectionSecretRef = xpv2.LocalSecretReference{Name: "example"}
 							o.Spec.ConnectionPool = &v1alpha1.ConnectionPool{
 								MaxOpenConnections: new(7),
 								MaxConnLifetime:    &metav1.Duration{Duration: 30 * time.Minute},
@@ -177,7 +176,7 @@ func TestGetProviderConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{
+							ProviderConfigReference: &xpv2.ProviderConfigReference{
 								Kind: v1alpha1.ProviderConfigKind,
 								Name: "example",
 							},
@@ -215,7 +214,7 @@ func TestGetProviderConfig(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: v1alpha1.DatabaseSpec{
 						ManagedResourceSpec: xpv2.ManagedResourceSpec{
-							ProviderConfigReference: &common.ProviderConfigReference{
+							ProviderConfigReference: &xpv2.ProviderConfigReference{
 								Kind: v1alpha1.ClusterProviderConfigKind,
 								Name: "example",
 							},
