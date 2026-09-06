@@ -6,14 +6,14 @@ reproduce GitHub issues end-to-end without modifying the core e2e flow.
 
 ## How it works
 
-Set `CUSTOM_POSTGRES_SCRIPTS_DIR` (and/or, in the future,
-`CUSTOM_MARIADB_SCRIPTS_DIR`, `CUSTOM_MSSQL_SCRIPTS_DIR`) to a directory
-containing files to run. The harness sorts the entries lexically and
+Set `CUSTOM_POSTGRES_SCRIPTS_DIR` or `CUSTOM_MARIADB_SCRIPTS_DIR` (and, in
+the future, `CUSTOM_MSSQL_SCRIPTS_DIR`) to a directory containing files to
+run. The harness sorts the entries lexically and
 dispatches by extension:
 
 | Extension | Action                                              |
 |-----------|-----------------------------------------------------|
-| `.sql`    | Piped to `psql` as superuser against the root DB    |
+| `.sql`    | Piped to `psql` (or `mariadb`) as root              |
 | `.yaml`   | `kubectl apply -f <file>`                           |
 | `.yml`    | `kubectl apply -f <file>`                           |
 | `.sh`     | Executed; receives env vars described below         |
@@ -46,6 +46,13 @@ the provider config is applied but before the built-in test resources
 (`Database`, `Role`, `Schema`, `Grant`) are created. The database is
 reachable on `localhost:5432` via the port-forward established in
 `setup_postgresdb_no_tls`.
+
+For MariaDB the hook fires inside `integration_tests_mariadb` after the
+ProviderConfig is applied, on both the TLS/namespaced and the plain/cluster
+pass. There is no port-forward: `.sql` files are piped into `mariadb -uroot`
+inside the `mariadb-0` pod, and `.sh` scripts get the same thing as an
+exported shell function, `mariadb_sql` (`mariadb_sql -e "SELECT 1"` or
+`mariadb_sql < file.sql`; output is `-N`, no headers).
 
 ## Environment available to scripts
 
@@ -85,6 +92,7 @@ so you can inspect resources with `kubectl`.
 | `postgres-routine-grant/` | Routine Grant on a multi-argument function (Observe cross join, fixed on master); 1-arg control |
 | `postgres-pr-436-routine-args/` | https://github.com/crossplane-contrib/provider-sql/pull/436 — schema-qualified composite types in `routines[].args`: admission contract, overload disambiguation, re-reconcile stability, delete precision, plus informational probes for `public.`/`pg_catalog.`-qualified spellings |
 | `postgres-issue-440-extension-schema/` | https://github.com/crossplane-contrib/provider-sql/issues/440 — `Extension.spec.forProvider.schema`: postgis (non-relocatable) into `gis`, hstore into `"Mixed Case"`, late-init control, missing-schema rejection, out-of-band drift revert, impossible-move error surfacing, delete completeness. Needs `POSTGRES_IMAGE=imresamu/postgis:18-3.6` |
+| `mariadb-column-grants/` | MySQL column grants converge: one-column-per-entry spec vs the merged, hash-ordered `SHOW GRANTS` form, zero writes on re-reconcile (general log), adding a column grants only that column, delete precision and completeness. Fails on master |
 | `postgres-pr-442-role-password/` | https://github.com/crossplane-contrib/provider-sql/pull/442 — Role password loss on restore (#441): recreate with empty status, Update failing after `ALTER ROLE PASSWORD`, trigger rotation, no-op reconcile, delete. Logins run inside the postgres pod via the Service (the port-forward is loopback and trusted). Probes: extra rotation after recreate, future-dated trigger churn |
 
 ## Choosing the PostgreSQL image
