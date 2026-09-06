@@ -1,0 +1,36 @@
+# One column per entry: MariaDB and MySQL fold these into
+# "SELECT (`a`, `b`)" in SHOW GRANTS. UPDATE lists its columns in an
+# order the server will not echo back.
+apiVersion: mysql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: colgrant-split
+spec:
+  forProvider:
+    user: colgrant
+    database: colgrant
+    table: t
+    privileges:
+      - SELECT (`a`)
+      - SELECT (`b`)
+      - UPDATE (`b`, `a`)
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default
+---
+# A table-wide privilege next to a multi-column one on a second table.
+apiVersion: mysql.sql.${APIGROUP_SUFFIX}crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: colgrant-multi
+spec:
+  forProvider:
+    user: colgrant
+    database: colgrant
+    table: t2
+    privileges:
+      - INSERT
+      - SELECT (`c`, `b`, `a`)
+  providerConfigRef:
+    ${PROVIDERCONFIG_KIND_LINE}
+    name: default

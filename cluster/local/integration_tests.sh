@@ -428,6 +428,57 @@ if [ "${QUICK_TEST:-}" == "true" ]; then
   exit 0
 fi
 
+# Run SQL as root inside the MariaDB pod; stdin and -e both work.
+# Exported so .sh bundle scripts can call it.
+mariadb_sql() {
+  "${KUBECTL}" exec -i mariadb-0 -- bash -c \
+    'mariadb -uroot -p"${MARIADB_ROOT_PASSWORD}" -N "$@"' mariadb "$@"
+}
+export -f mariadb_sql
+
+# Run user-provided scripts against the running MariaDB and cluster.
+# See cluster/local/scripts/README.md for the contract.
+run_custom_mariadb_scripts() {
+  local dir="${CUSTOM_MARIADB_SCRIPTS_DIR:-}"
+  if [ -z "${dir}" ]; then
+    return 0
+  fi
+  if [ ! -d "${dir}" ]; then
+    echo_error "CUSTOM_MARIADB_SCRIPTS_DIR=${dir} is not a directory"
+  fi
+
+  echo_step "running custom mariadb scripts from ${dir}"
+
+  export KUBECTL
+  export API_TYPE
+  export APIGROUP_SUFFIX
+  PROVIDERCONFIG_KIND_LINE=""
+  if [ "${API_TYPE}" = "namespaced" ]; then
+    PROVIDERCONFIG_KIND_LINE="kind: ProviderConfig"
+  fi
+  export PROVIDERCONFIG_KIND_LINE
+
+  local f
+  for f in $(find "${dir}" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.yaml' -o -name '*.yml' -o -name '*.sh' \) | sort); do
+    case "${f}" in
+      *.sql)
+        echo_sub_step "mariadb < ${f}"
+        mariadb_sql < "${f}"
+        ;;
+      *.yaml|*.yml)
+        echo_sub_step "kubectl apply ${f}"
+        envsubst '${APIGROUP_SUFFIX} ${PROVIDERCONFIG_KIND_LINE}' < "${f}" | "${KUBECTL}" apply -f -
+        ;;
+      *.sh)
+        echo_sub_step "bash ${f}"
+        if ! bash "${f}"; then
+          echo_error "custom mariadb script failed: ${f}"
+        fi
+        ;;
+    esac
+  done
+}
+
 integration_tests_mariadb() {
   if [[ "${TLS}" == "true" ]]; then
     setup_tls_certs
@@ -438,6 +489,7 @@ integration_tests_mariadb() {
     setup_provider_config_no_tls
   fi
 
+  run_custom_mariadb_scripts
   test_all
 
   cleanup_test_resources
