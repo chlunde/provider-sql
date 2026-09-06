@@ -658,6 +658,39 @@ func TestObserve(t *testing.T) {
 				observedPrivileges: []string{"CREATE", "DROP"},
 			},
 		},
+		"SuccessColumnGrantMerged": {
+			reason: "Column grants listed per column in the spec are in sync with the merged, reordered form SHOW GRANTS returns",
+			fields: fields{
+				db: mockDB{
+					MockQuery: func(ctx context.Context, q xsql.Query) (*sql.Rows, error) {
+						return mockRowsToSQLRows(
+							sqlmock.NewRows([]string{"Grants"}).
+								AddRow("GRANT SELECT (`b`, `a`), UPDATE (`a`) ON `success-db`.`success-table` TO 'success-user'@%"),
+						), nil
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Grant{
+					Spec: v1alpha1.GrantSpec{
+						ForProvider: v1alpha1.GrantParameters{
+							Database:   ptr.To("success-db"),
+							User:       ptr.To("success-user"),
+							Table:      ptr.To("success-table"),
+							Privileges: v1alpha1.GrantPrivileges{"SELECT (`a`)", "SELECT (`b`)", "UPDATE (a)"},
+						},
+					},
+				},
+			},
+			want: want{
+				o: managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: true,
+				},
+				err:                nil,
+				observedPrivileges: []string{"SELECT (`b`, `a`)", "UPDATE (`a`)"},
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -1035,6 +1068,40 @@ func TestUpdate(t *testing.T) {
 				err: nil,
 			},
 		},
+		"SuccessColumnGrantAddsColumn": {
+			reason: "Only the missing column is granted; the columns already granted are not revoked first",
+			fields: fields{
+				db: &mockDB{
+					MockExec: func(ctx context.Context, q xsql.Query) error {
+						if q.String != "GRANT SELECT (`b`) ON `test-example`.`test-table` TO 'test-example'@'%'" {
+							return errors.New(q.String)
+						}
+						return nil
+					},
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Grant{
+					Spec: v1alpha1.GrantSpec{
+						ForProvider: v1alpha1.GrantParameters{
+							Database:   ptr.To("test-example"),
+							User:       ptr.To("test-example"),
+							Table:      ptr.To("test-table"),
+							Privileges: v1alpha1.GrantPrivileges{"SELECT (`a`, `b`)"},
+						},
+					},
+					Status: v1alpha1.GrantStatus{
+						AtProvider: v1alpha1.GrantObservation{
+							Privileges: []string{"SELECT (`a`)"},
+						},
+					},
+				},
+			},
+			want: want{
+				err: nil,
+				c:   managed.ExternalUpdate{},
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -1239,6 +1306,63 @@ func Test_diffPermissions(t *testing.T) {
 			},
 			want: want{
 				toRevoke: []string{"CREATE TABLE", "DELETE", "INSERT"},
+			},
+		},
+		"ColumnOrder": {
+			// MariaDB 12 lists columns in hash order, MySQL 8.4 alphabetically.
+			args: args{
+				desired:  []string{"SELECT (`a`, `b`)"},
+				observed: []string{"SELECT (`b`, `a`)"},
+			},
+		},
+		"ColumnWhitespace": {
+			args: args{
+				desired:  []string{"SELECT (`a`, `b`)"},
+				observed: []string{"SELECT (`a`,`b`)"},
+			},
+		},
+		"ColumnMergedByServer": {
+			// SHOW GRANTS folds SELECT (a), SELECT (b) into SELECT (a, b).
+			args: args{
+				desired:  []string{"SELECT (`a`)", "SELECT (`b`)"},
+				observed: []string{"SELECT (`a`, `b`)"},
+			},
+		},
+		"ColumnUnquoted": {
+			// SHOW GRANTS always backtick-quotes column names. The CRD pattern
+			// rejects this spelling today; kept so the comparison stays safe.
+			args: args{
+				desired:  []string{"select (a, b)"},
+				observed: []string{"SELECT (`a`, `b`)"},
+			},
+		},
+		"ColumnNeedsGrant": {
+			args: args{
+				desired:  []string{"SELECT (`a`, `b`)"},
+				observed: []string{"SELECT (`a`)"},
+			},
+			want: want{
+				toGrant: []string{"SELECT (`b`)"},
+			},
+		},
+		"ColumnNeedsRevoke": {
+			args: args{
+				desired:  []string{"SELECT (`a`)"},
+				observed: []string{"SELECT (`b`, `a`)"},
+			},
+			want: want{
+				toRevoke: []string{"SELECT (`b`)"},
+			},
+		},
+		"ColumnVsTable": {
+			// Table-wide SELECT and column SELECT are distinct privileges.
+			args: args{
+				desired:  []string{"SELECT"},
+				observed: []string{"SELECT (`a`)"},
+			},
+			want: want{
+				toGrant:  []string{"SELECT"},
+				toRevoke: []string{"SELECT (`a`)"},
 			},
 		},
 	}

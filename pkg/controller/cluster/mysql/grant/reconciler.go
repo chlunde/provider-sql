@@ -408,53 +408,81 @@ func (c *external) Delete(ctx context.Context, mg *v1alpha1.Grant) (managed.Exte
 	return managed.ExternalDelete{}, nil
 }
 
-func normalizePrivilege(p string) string {
-	p = strings.TrimSpace(p)
+// privilegeSet is the canonical form of a privilege list. SHOW GRANTS
+// returns "SELECT (`b`, `a`)" for a spec of "SELECT (a)", "SELECT (b)":
+// keywords upper-cased, columns quoted, merged per keyword and in an order
+// the server picks. Canonicalising both sides makes them comparable.
+type privilegeSet struct {
+	table   map[string]struct{}            // "SELECT"
+	columns map[string]map[string]struct{} // "SELECT" -> {"`a`", "`b`"}
+}
 
+func canonicalize(privileges []string) privilegeSet {
+	s := privilegeSet{
+		table:   map[string]struct{}{},
+		columns: map[string]map[string]struct{}{},
+	}
+	for _, p := range privileges {
+		name, cols := splitColumns(p)
+		// Special case because ALL is an alias for "ALL PRIVILEGES"
+		name = strings.ReplaceAll(strings.ToUpper(name), allPrivileges, "ALL")
+		if cols == nil {
+			s.table[name] = struct{}{}
+			continue
+		}
+		if s.columns[name] == nil {
+			s.columns[name] = map[string]struct{}{}
+		}
+		for _, c := range cols {
+			s.columns[name][c] = struct{}{}
+		}
+	}
+	return s
+}
+
+// splitColumns splits "SELECT (a, `b`)" into "SELECT" and ["`a`", "`b`"].
+// cols is nil for a privilege without a column list.
+func splitColumns(p string) (name string, cols []string) {
+	p = strings.TrimSpace(p)
 	start := strings.Index(p, "(")
 	end := strings.LastIndex(p, ")")
-
 	if start == -1 || end == -1 || end <= start {
-		return p
+		return p, nil
 	}
+	cols = []string{}
+	for _, c := range splitGrantPrivileges(p[start+1 : end]) {
+		cols = append(cols, mysql.QuoteIdentifier(strings.Trim(c, "`")))
+	}
+	return strings.TrimSpace(p[:start]), cols
+}
 
-	cols := p[start+1 : end]
-
-	parts := splitGrantPrivileges(cols)
-	sort.Strings(parts)
-
-	return p[:start+1] + strings.Join(parts, ", ") + p[end:]
+// minus returns the privileges in s that t lacks. Column privileges are
+// compared per column: SELECT (`a`, `b`) minus SELECT (`a`) is SELECT (`b`),
+// so adding a column never revokes the ones already granted.
+func (s privilegeSet) minus(t privilegeSet) []string {
+	var out []string
+	for p := range s.table {
+		if _, ok := t.table[p]; !ok {
+			out = append(out, p)
+		}
+	}
+	for p, cols := range s.columns {
+		var missing []string
+		for c := range cols {
+			if _, ok := t.columns[p][c]; !ok {
+				missing = append(missing, c)
+			}
+		}
+		if len(missing) == 0 {
+			continue
+		}
+		sort.Strings(missing)
+		out = append(out, p+" ("+strings.Join(missing, ", ")+")")
+	}
+	return out
 }
 
 func diffPermissions(desired, observed []string) ([]string, []string) {
-	desiredMap := make(map[string]struct{}, len(desired))
-	observedMap := make(map[string]struct{}, len(observed))
-
-	for _, desiredPrivilege := range desired {
-		// Special case because ALL is an alias for "ALL PRIVILEGES"
-		desiredPrivilegeMapped := strings.ReplaceAll(normalizePrivilege(desiredPrivilege), allPrivileges, "ALL")
-		desiredMap[desiredPrivilegeMapped] = struct{}{}
-	}
-	for _, observedPrivilege := range observed {
-		// Special case because ALL is an alias for "ALL PRIVILEGES"
-		observedPrivilegeMapped := strings.ReplaceAll(observedPrivilege, allPrivileges, "ALL")
-		observedMap[observedPrivilegeMapped] = struct{}{}
-	}
-
-	var toGrant []string
-	var toRevoke []string
-
-	for desiredPrivilege := range desiredMap {
-		if _, ok := observedMap[desiredPrivilege]; !ok {
-			toGrant = append(toGrant, desiredPrivilege)
-		}
-	}
-
-	for observedPrivilege := range observedMap {
-		if _, ok := desiredMap[observedPrivilege]; !ok {
-			toRevoke = append(toRevoke, observedPrivilege)
-		}
-	}
-
-	return toGrant, toRevoke
+	d, o := canonicalize(desired), canonicalize(observed)
+	return d.minus(o), o.minus(d)
 }
